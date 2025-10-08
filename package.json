@@ -1,0 +1,45 @@
+{
+  "name": "give-protocol-contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for Give Protocol - blockchain-based charitable giving platform",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
+    "deploy:moonbase": "hardhat run scripts/deploy.ts --network moonbase",
+    "deploy:verification": "hardhat run scripts/deploy-verification.ts --network moonbase",
+    "deploy:distribution": "hardhat run scripts/deploy-distribution.ts --network moonbase",
+    "node": "hardhat node",
+    "lint:sol": "solhint 'contracts/**/*.sol'",
+    "fuzz:arm": "~/.local/bin/fuzz arm",
+    "fuzz:run": "~/.local/bin/fuzz run",
+    "fuzz:disarm": "~/.local/bin/fuzz disarm"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.9",
+    "@nomicfoundation/hardhat-ethers": "^3.0.9",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.13",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.14",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.11.24",
+    "dotenv": "^16.4.7",
+    "eth-scribble": "^0.7.10",
+    "ethers": "^6.14.0",
+    "hardhat": "^2.26.3",
+    "hardhat-gas-reporter": "^1.0.10",
+    "solhint": "^5.2.0",
+    "solidity-coverage": "^0.8.16",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@chainlink/contracts": "^1.4.0",
+    "@openzeppelin/contracts": "^5.4.0"
+  }
+}

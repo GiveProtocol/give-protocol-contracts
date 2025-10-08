@@ -1,0 +1,25 @@
+{
+  "instrToOriginalMap": [],
+  "otherInstrumentation": [],
+  "propertyMap": [],
+  "originalSourceList": [
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/access/Ownable.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/interfaces/IERC1363.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/interfaces/IERC165.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/interfaces/IERC20.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/utils/Address.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/utils/Context.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/utils/Errors.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/utils/Pausable.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+    "/home/drigo/projects/Duration/node_modules/@openzeppelin/contracts/utils/introspection/IERC165.sol",
+    "contracts/CharityScheduledDistribution.sol",
+    "contracts/DistributionExecutor.sol",
+    "contracts/DurationDonation.sol",
+    "contracts/VolunteerVerification.sol"
+  ],
+  "instrSourceList": [],
+  "scribbleVersion": "0.7.10"
+}

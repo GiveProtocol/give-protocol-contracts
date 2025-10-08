@@ -1,0 +1,35 @@
+analyze:
+  solc_version: 0.8.20
+  remappings: []
+  scribble_path: ./node_modules/.bin/scribble
+  no_assert: true
+  assert_: false
+
+fuzz:
+  ide: hardhat
+  build_directory: artifacts
+  sources_directory: contracts
+  number_of_cores: 1
+  rpc_url: http://localhost:8545
+  campaign_name_prefix: duration-fuzzing
+  map_to_original_source: false
+  enable_cheat_codes: false
+  max_sequence_length: 100
+  ignore_code_hash: false
+  incremental: false
+  quick_check: false
+  foundry_tests: false
+  dry_run: false
+  smart_mode: false
+  include_library_contracts: false
+  check_updates: true
+  ci_mode: false
+  targets:
+    - contracts/DurationDonation.sol
+    - contracts/VolunteerVerification.sol
+    - contracts/CharityScheduledDistribution.sol
+    - contracts/DistributionExecutor.sol
+
+product_analytics:
+  report_crashes: true
+  allow_analytics: true
