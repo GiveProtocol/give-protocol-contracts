@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 import { Contract } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
-describe("CharityScheduledDistribution", function () {
+describe("CharityScheduledDistribution", () => {
   let distribution: Contract;
   let executor: Contract;
   let token: Contract;
@@ -15,7 +15,7 @@ describe("CharityScheduledDistribution", function () {
   const TOTAL_AMOUNT = ethers.parseEther("12.0"); // 12 tokens
   const MONTHLY_AMOUNT = ethers.parseEther("1.0"); // 1 token per month
 
-  beforeEach(async function () {
+  beforeEach(async () => {
     [_owner, charity, donor] = await ethers.getSigners();
 
     // Deploy mock ERC20 token
@@ -42,8 +42,8 @@ describe("CharityScheduledDistribution", function () {
     await distribution.setTokenPrice(await token.getAddress(), TOKEN_PRICE);
   });
 
-  describe("Charity Management", function () {
-    it("Should allow owner to add and remove charities", async function () {
+  describe("Charity Management", () => {
+    it("Should allow owner to add and remove charities", async () => {
       const newCharity = ethers.Wallet.createRandom().address;
 
       await expect(distribution.addCharity(newCharity))
@@ -59,7 +59,7 @@ describe("CharityScheduledDistribution", function () {
       expect(await distribution.verifiedCharities(newCharity)).to.equal(false);
     });
 
-    it("Should not allow non-owner to add charities", async function () {
+    it("Should not allow non-owner to add charities", async () => {
       const newCharity = ethers.Wallet.createRandom().address;
 
       await expect(
@@ -71,8 +71,8 @@ describe("CharityScheduledDistribution", function () {
     });
   });
 
-  describe("Token Price Management", function () {
-    it("Should allow owner to set token prices", async function () {
+  describe("Token Price Management", () => {
+    it("Should allow owner to set token prices", async () => {
       const newToken = ethers.Wallet.createRandom().address;
       const newPrice = BigInt(200 * 10 ** 8); // $200 USD
 
@@ -83,7 +83,7 @@ describe("CharityScheduledDistribution", function () {
       expect(await distribution.tokenPrices(newToken)).to.equal(newPrice);
     });
 
-    it("Should not allow non-owner to set token prices", async function () {
+    it("Should not allow non-owner to set token prices", async () => {
       const newToken = ethers.Wallet.createRandom().address;
       const newPrice = BigInt(200 * 10 ** 8); // $200 USD
 
@@ -96,15 +96,15 @@ describe("CharityScheduledDistribution", function () {
     });
   });
 
-  describe("Schedule Creation", function () {
-    beforeEach(async function () {
+  describe("Schedule Creation", () => {
+    beforeEach(async () => {
       // Approve tokens for distribution contract
       await token
         .connect(donor)
         .approve(await distribution.getAddress(), TOTAL_AMOUNT);
     });
 
-    it("Should create a monthly distribution schedule", async function () {
+    it("Should create a monthly distribution schedule", async () => {
       await expect(
         distribution
           .connect(donor)
@@ -135,7 +135,7 @@ describe("CharityScheduledDistribution", function () {
       expect(schedule.active).to.equal(true);
     });
 
-    it("Should not create schedule for unverified charity", async function () {
+    it("Should not create schedule for unverified charity", async () => {
       const unverifiedCharity = ethers.Wallet.createRandom().address;
 
       await expect(
@@ -149,7 +149,7 @@ describe("CharityScheduledDistribution", function () {
       ).to.be.revertedWith("Charity not verified");
     });
 
-    it("Should not create schedule for unsupported token", async function () {
+    it("Should not create schedule for unsupported token", async () => {
       const unsupportedToken = ethers.Wallet.createRandom().address;
 
       await expect(
@@ -160,8 +160,8 @@ describe("CharityScheduledDistribution", function () {
     });
   });
 
-  describe("Distribution Execution", function () {
-    beforeEach(async function () {
+  describe("Distribution Execution", () => {
+    beforeEach(async () => {
       // Approve tokens for distribution contract
       await token
         .connect(donor)
@@ -177,7 +177,7 @@ describe("CharityScheduledDistribution", function () {
         );
     });
 
-    it("Should not distribute before the interval has passed", async function () {
+    it("Should not distribute before the interval has passed", async () => {
       await distribution.executeDistributions([1]);
 
       // No distribution should have occurred
@@ -186,7 +186,7 @@ describe("CharityScheduledDistribution", function () {
       expect(await token.balanceOf(charity.address)).to.equal(0);
     });
 
-    it("Should distribute after the interval has passed", async function () {
+    it("Should distribute after the interval has passed", async () => {
       // Advance time by 31 days
       await ethers.provider.send("evm_increaseTime", [31 * 24 * 60 * 60]);
       await ethers.provider.send("evm_mine", []);
@@ -207,7 +207,7 @@ describe("CharityScheduledDistribution", function () {
       expect(await token.balanceOf(charity.address)).to.equal(MONTHLY_AMOUNT);
     });
 
-    it("Should execute distributions via the executor contract", async function () {
+    it("Should execute distributions via the executor contract", async () => {
       // Advance time by 31 days
       await ethers.provider.send("evm_increaseTime", [31 * 24 * 60 * 60]);
       await ethers.provider.send("evm_mine", []);
@@ -221,8 +221,8 @@ describe("CharityScheduledDistribution", function () {
     });
   });
 
-  describe("Schedule Cancellation", function () {
-    beforeEach(async function () {
+  describe("Schedule Cancellation", () => {
+    beforeEach(async () => {
       // Approve tokens for distribution contract
       await token
         .connect(donor)
@@ -238,7 +238,7 @@ describe("CharityScheduledDistribution", function () {
         );
     });
 
-    it("Should allow donor to cancel schedule", async function () {
+    it("Should allow donor to cancel schedule", async () => {
       await expect(distribution.connect(donor).cancelSchedule(1))
         .to.emit(distribution, "ScheduleCancelled")
         .withArgs(1);
@@ -252,15 +252,15 @@ describe("CharityScheduledDistribution", function () {
       expect(await token.balanceOf(donor.address)).to.equal(TOTAL_AMOUNT);
     });
 
-    it("Should not allow non-donor to cancel schedule", async function () {
+    it("Should not allow non-donor to cancel schedule", async () => {
       await expect(
         distribution.connect(charity).cancelSchedule(1),
       ).to.be.revertedWith("Not the donor");
     });
   });
 
-  describe("Donor Schedules", function () {
-    beforeEach(async function () {
+  describe("Donor Schedules", () => {
+    beforeEach(async () => {
       // Approve tokens for distribution contract
       await token
         .connect(donor)
@@ -284,14 +284,14 @@ describe("CharityScheduledDistribution", function () {
         );
     });
 
-    it("Should return all active schedules for a donor", async function () {
+    it("Should return all active schedules for a donor", async () => {
       const schedules = await distribution.getDonorSchedules(donor.address);
       expect(schedules.length).to.equal(2);
       expect(schedules[0]).to.equal(1);
       expect(schedules[1]).to.equal(2);
     });
 
-    it("Should not include cancelled schedules", async function () {
+    it("Should not include cancelled schedules", async () => {
       await distribution.connect(donor).cancelSchedule(1);
 
       const schedules = await distribution.getDonorSchedules(donor.address);

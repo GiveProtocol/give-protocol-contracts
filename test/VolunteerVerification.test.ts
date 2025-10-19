@@ -3,14 +3,14 @@ import { ethers } from "hardhat";
 import { Contract } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
-describe("VolunteerVerification", function () {
+describe("VolunteerVerification", () => {
   let verification: Contract;
   let _owner: SignerWithAddress;
   let charity: SignerWithAddress;
   let applicant: SignerWithAddress;
   let volunteer: SignerWithAddress;
 
-  beforeEach(async function () {
+  beforeEach(async () => {
     [_owner, charity, applicant, volunteer] = await ethers.getSigners();
 
     // Deploy verification contract
@@ -20,8 +20,8 @@ describe("VolunteerVerification", function () {
     verification = await VolunteerVerification.deploy();
   });
 
-  describe("Charity Registration", function () {
-    it("Should allow owner to register a charity", async function () {
+  describe("Charity Registration", () => {
+    it("Should allow owner to register a charity", async () => {
       const latestBlock = await ethers.provider.getBlock("latest");
       if (!latestBlock) {
         throw new Error("Could not get latest block");
@@ -37,7 +37,7 @@ describe("VolunteerVerification", function () {
       expect(charityInfo.isActive).to.equal(true);
     });
 
-    it("Should not allow non-owner to register a charity", async function () {
+    it("Should not allow non-owner to register a charity", async () => {
       await expect(
         verification.connect(charity).registerCharity(charity.address),
       ).to.be.revertedWithCustomError(
@@ -47,16 +47,16 @@ describe("VolunteerVerification", function () {
     });
   });
 
-  describe("Application Verification", function () {
+  describe("Application Verification", () => {
     const applicationHash = ethers.keccak256(
       ethers.toUtf8Bytes("application1"),
     );
 
-    beforeEach(async function () {
+    beforeEach(async () => {
       await verification.registerCharity(charity.address);
     });
 
-    it("Should allow charity to verify an application", async function () {
+    it("Should allow charity to verify an application", async () => {
       await expect(
         verification
           .connect(charity)
@@ -77,7 +77,7 @@ describe("VolunteerVerification", function () {
       expect(app.charity).to.equal(charity.address);
     });
 
-    it("Should not allow non-charity to verify an application", async function () {
+    it("Should not allow non-charity to verify an application", async () => {
       await expect(
         verification
           .connect(applicant)
@@ -85,7 +85,7 @@ describe("VolunteerVerification", function () {
       ).to.be.revertedWithCustomError(verification, "CharityNotRegistered");
     });
 
-    it("Should not allow verifying the same application twice", async function () {
+    it("Should not allow verifying the same application twice", async () => {
       await verification
         .connect(charity)
         .verifyApplication(applicationHash, applicant.address);
@@ -98,15 +98,15 @@ describe("VolunteerVerification", function () {
     });
   });
 
-  describe("Hours Verification", function () {
+  describe("Hours Verification", () => {
     const hoursHash = ethers.keccak256(ethers.toUtf8Bytes("hours1"));
     const hours = 8;
 
-    beforeEach(async function () {
+    beforeEach(async () => {
       await verification.registerCharity(charity.address);
     });
 
-    it("Should allow charity to verify volunteer hours", async function () {
+    it("Should allow charity to verify volunteer hours", async () => {
       await expect(
         verification
           .connect(charity)
@@ -129,7 +129,7 @@ describe("VolunteerVerification", function () {
       expect(hoursVerification.hours).to.equal(hours);
     });
 
-    it("Should not allow non-charity to verify hours", async function () {
+    it("Should not allow non-charity to verify hours", async () => {
       await expect(
         verification
           .connect(volunteer)
@@ -137,7 +137,7 @@ describe("VolunteerVerification", function () {
       ).to.be.revertedWithCustomError(verification, "CharityNotRegistered");
     });
 
-    it("Should not allow verifying the same hours twice", async function () {
+    it("Should not allow verifying the same hours twice", async () => {
       await verification
         .connect(charity)
         .verifyHours(hoursHash, volunteer.address, hours);
@@ -150,12 +150,12 @@ describe("VolunteerVerification", function () {
     });
   });
 
-  describe("Charity Status", function () {
-    beforeEach(async function () {
+  describe("Charity Status", () => {
+    beforeEach(async () => {
       await verification.registerCharity(charity.address);
     });
 
-    it("Should allow owner to deactivate a charity", async function () {
+    it("Should allow owner to deactivate a charity", async () => {
       await expect(verification.updateCharityStatus(charity.address, false))
         .to.emit(verification, "CharityStatusUpdated")
         .withArgs(charity.address, false);
@@ -164,7 +164,7 @@ describe("VolunteerVerification", function () {
       expect(charityInfo.isActive).to.equal(false);
     });
 
-    it("Should not allow inactive charity to verify applications", async function () {
+    it("Should not allow inactive charity to verify applications", async () => {
       await verification.updateCharityStatus(charity.address, false);
 
       const applicationHash = ethers.keccak256(
@@ -179,12 +179,12 @@ describe("VolunteerVerification", function () {
     });
   });
 
-  describe("Pausing", function () {
-    beforeEach(async function () {
+  describe("Pausing", () => {
+    beforeEach(async () => {
       await verification.registerCharity(charity.address);
     });
 
-    it("Should allow owner to pause and unpause the contract", async function () {
+    it("Should allow owner to pause and unpause the contract", async () => {
       await verification.pause();
 
       const applicationHash = ethers.keccak256(
