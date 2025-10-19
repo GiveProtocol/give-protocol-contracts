@@ -6,3 +6,9 @@ name = "javascript"
 [[analyzers]]
 name = "slither"
 type = "community"
+
+  [analyzers.meta]
+  dependency_file_paths = ["package.json"]
+
+  [[analyzers.transformers]]
+  name = "hardhat-compile"
