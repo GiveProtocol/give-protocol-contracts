@@ -1,0 +1,25 @@
+{
+  "detectors_to_exclude": [
+    "naming-convention",
+    "solc-version",
+    "pragma"
+  ],
+  "exclude_dependencies": true,
+  "exclude_informational": false,
+  "exclude_low": false,
+  "exclude_medium": false,
+  "exclude_high": false,
+  "filter_paths": [
+    "node_modules",
+    "test",
+    "scripts"
+  ],
+  "compile_force_framework": "hardhat",
+  "exclude_optimization": false,
+  "hardhat_cache_directory": "cache",
+  "hardhat_artifacts_directory": "artifacts",
+  "solc_remaps": [
+    "@openzeppelin=node_modules/@openzeppelin",
+    "@chainlink=node_modules/@chainlink"
+  ]
+}

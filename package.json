@@ -12,6 +12,9 @@
     "deploy:distribution": "hardhat run scripts/deploy-distribution.ts --network moonbase",
     "node": "hardhat node",
     "lint:sol": "solhint 'contracts/**/*.sol'",
+    "slither": "slither .",
+    "slither:sarif": "slither . --sarif=slither-results.sarif",
+    "slither:json": "slither . --json=slither-results.json",
     "fuzz:arm": "~/.local/bin/fuzz arm",
     "fuzz:run": "~/.local/bin/fuzz run",
     "fuzz:disarm": "~/.local/bin/fuzz disarm"
