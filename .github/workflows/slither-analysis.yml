@@ -51,20 +51,48 @@ jobs:
           solc-select install 0.8.20
           solc-select use 0.8.20
 
+      - name: Verify compilation
+        run: |
+          echo "Checking artifacts directory..."
+          ls -la artifacts/contracts/ || echo "Artifacts not found"
+
       - name: Run Slither
-        run: npm run slither:sarif
+        id: slither
+        run: |
+          echo "Running Slither analysis..."
+          npm run slither:sarif 2>&1 | tee slither-output.log || echo "Slither analysis encountered issues"
+
+          echo "Checking for SARIF file..."
+          if [ -f slither-results.sarif ]; then
+            echo "SARIF file generated successfully"
+            echo "File size: $(wc -c < slither-results.sarif) bytes"
+            echo "sarif_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "SARIF file not generated"
+            echo "Listing current directory:"
+            ls -la
+            echo "sarif_exists=false" >> $GITHUB_OUTPUT
+          fi
         continue-on-error: true
+
+      - name: Upload Slither logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: slither-logs
+          path: slither-output.log
+          retention-days: 7
 
       - name: Upload Slither SARIF results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: steps.slither.outputs.sarif_exists == 'true'
         with:
           sarif_file: slither-results.sarif
           category: slither
 
       - name: Upload Slither results as artifact
         uses: actions/upload-artifact@v4
-        if: always()
+        if: steps.slither.outputs.sarif_exists == 'true'
         with:
           name: slither-results
           path: slither-results.sarif
