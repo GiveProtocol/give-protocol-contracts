@@ -1,13 +1,15 @@
 {
   "network": "moonbase",
   "chainId": 1287,
-  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  "timestamp": "2025-09-21T22:30:16.473Z",
+  "deployer": "0x8cFc24Ad1CDc3B80338392f17f6e6ab40552e1C0",
+  "timestamp": "2025-10-31T04:24:37.610Z",
   "contracts": {
-    "MockERC20": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    "DurationDonation": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-    "VolunteerVerification": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-    "CharityScheduledDistribution": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-    "DistributionExecutor": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
-  }
+    "MockERC20": "0x7cb6b60Ca0E18a0bcEb24bd3C99D8894Ed199ABD",
+    "DurationDonation": "0x6c306Ba1F150fC3A94F7901903fD3Adad2ed47Cf",
+    "VolunteerVerification": "0xfd1516796f0BA50F15ec626be5689b6C57ab717E",
+    "CharityScheduledDistribution": "0xeC311E3d08081Abac729a949B6Eb2c1b557C5860",
+    "DistributionExecutor": "0x519392b3f44D44D5F331064e00c9Af661Db133d4",
+    "PortfolioFunds": "0xd9616aAf7f8E9BEb803eA899712A5409b9016350"
+  },
+  "lastUpdated": "2025-11-15T00:28:00.000Z"
 }
