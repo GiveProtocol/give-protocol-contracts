@@ -4,19 +4,7 @@ version = 1
 name = "javascript"
 enabled = true
 
-  [analyzers.meta]
-  plugins = ["nodejs"]
-  environment = ["nodejs"]
-
 [[analyzers]]
 name = "slither"
 enabled = true
 type = "community"
-
-  [analyzers.meta]
-  # Run Slither with high and medium severity findings
-  # Configure to skip common false positives
-  version = "latest"
-
-[[transformers]]
-name = "hardhat-compile"
