@@ -79,15 +79,19 @@ describe("DurationDonation", () => {
       const expectedToTreasury = expectedFee + platformTip;
 
       const treasuryBalanceBefore = await ethers.provider.getBalance(treasury.address);
+      const charityBalanceBefore = await ethers.provider.getBalance(charity.address);
 
       await donation.connect(donor).donateNative(charity.address, platformTip, {
         value: totalSent,
       });
 
       const treasuryBalanceAfter = await ethers.provider.getBalance(treasury.address);
+      const charityBalanceAfter = await ethers.provider.getBalance(charity.address);
 
       // Check fee + tip went to treasury
       expect(treasuryBalanceAfter - treasuryBalanceBefore).to.equal(expectedToTreasury);
+      // Check net amount went to charity
+      expect(charityBalanceAfter - charityBalanceBefore).to.equal(expectedNetToCharity);
     });
   });
 

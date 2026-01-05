@@ -24,6 +24,10 @@ const TEST_CHARITIES = {
   girlsWhoCode: "0xbcdef12345678901234567890123456789012345"
 };
 
+/**
+ * Registers test charity addresses with the PortfolioFunds contract
+ * @param {object} portfolioFunds - The deployed PortfolioFunds contract instance
+ */
 async function setupVerifiedCharities(portfolioFunds) {
   const charityList = [
     // Environmental charities
@@ -138,6 +142,11 @@ async function createPortfolioFunds(portfolioFunds) {
   }
 }
 
+/**
+ * Verifies the deployed contract on Moonscan block explorer
+ * @param {string} contractAddress - The deployed contract address
+ * @param {Array} constructorArgs - Constructor arguments used during deployment
+ */
 async function verifyContract(contractAddress, constructorArgs) {
   console.log("Waiting 30 seconds for Moonscan to index contract...");
   await new Promise(resolve => setTimeout(resolve, 30000));
@@ -157,6 +166,10 @@ async function verifyContract(contractAddress, constructorArgs) {
   }
 }
 
+/**
+ * Main deployment function for PortfolioFunds contract to Moonbase Alpha
+ * Deploys the contract, sets up charities, creates portfolio funds, and verifies on Moonscan
+ */
 async function main() {
   console.log("🚀 Starting PortfolioFunds deployment to Moonbase Alpha...");
 
