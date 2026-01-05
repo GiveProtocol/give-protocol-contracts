@@ -6,7 +6,7 @@ const { ethers } = require("hardhat");
  * @returns {Promise<void>}
  */
 async function main() {
-  console.log("🚀 Creating test scheduled donations...");
+  console.log("Creating test scheduled donations...");
 
   // Get the deployer account
   const [deployer, donor1, donor2] = await hre.ethers.getSigners();
@@ -20,7 +20,7 @@ async function main() {
 
   if (!mockTokenAddress || !distributionAddress) {
     console.error(
-      "❌ Error: Contract addresses not found in environment variables",
+      "[ERROR] Contract addresses not found in environment variables",
     );
     console.log(
       "Please ensure VITE_TOKEN_CONTRACT_ADDRESS and VITE_DISTRIBUTION_CONTRACT_ADDRESS are set",
@@ -44,39 +44,39 @@ async function main() {
     "0x2345678901234567890123456789012345678901", // Test charity 2
   ];
 
-  console.log("\n📝 Step 1: Adding verified charities...");
+  console.log("\nStep 1: Adding verified charities...");
   for (const charity of testCharities) {
     try {
       const tx = await distribution.addCharity(charity);
       await tx.wait();
-      console.log(`✅ Added charity: ${charity}`);
+      console.log(`[OK] Added charity: ${charity}`);
     } catch (error) {
-      console.log(`⚠️  Charity might already be added: ${charity}`);
+      console.log(`[WARN] Charity might already be added: ${charity}`);
     }
   }
 
-  console.log("\n💰 Step 2: Setting token price (above $42 USD minimum)...");
+  console.log("\nStep 2: Setting token price (above $42 USD minimum)...");
   // Set token price to $50 USD (with 8 decimals)
   const tokenPrice = ethers.parseUnits("50", 8); // $50 with 8 decimals
   try {
     const tx = await distribution.setTokenPrice(mockTokenAddress, tokenPrice);
     await tx.wait();
-    console.log("✅ Set token price to $50 USD");
+    console.log("[OK] Set token price to $50 USD");
   } catch (error) {
-    console.log("⚠️  Token price might already be set");
+    console.log("[WARN] Token price might already be set");
   }
 
-  console.log("\n🪙 Step 3: Minting test tokens to donors...");
+  console.log("\nStep 3: Minting test tokens to donors...");
   // Mint 1000 tokens to each test donor
   const mintAmount = ethers.parseEther("1000");
 
   for (const donor of [donor1, donor2]) {
     const tx = await mockToken.mint(donor.address, mintAmount);
     await tx.wait();
-    console.log(`✅ Minted 1000 TEST tokens to ${donor.address}`);
+    console.log(`[OK] Minted 1000 TEST tokens to ${donor.address}`);
   }
 
-  console.log("\n📅 Step 4: Creating scheduled donations...");
+  console.log("\nStep 4: Creating scheduled donations...");
 
   // Schedule 1: Donor1 schedules 120 tokens to charity1 (10 tokens/month for 12 months)
   const schedule1Amount = ethers.parseEther("120");
@@ -87,7 +87,7 @@ async function main() {
     .connect(donor1)
     .approve(distributionAddress, schedule1Amount);
   await approveTx1.wait();
-  console.log("✅ Approved token transfer");
+  console.log("[OK] Approved token transfer");
 
   // Create the schedule
   const scheduleTx1 = await distribution
@@ -95,7 +95,7 @@ async function main() {
     .createSchedule(testCharities[0], mockTokenAddress, schedule1Amount);
   await scheduleTx1.wait();
   console.log(
-    `✅ Created schedule: 120 tokens over 12 months to charity ${testCharities[0]}`,
+    `[OK] Created schedule: 120 tokens over 12 months to charity ${testCharities[0]}`,
   );
 
   // Schedule 2: Donor2 schedules 240 tokens to charity2 (20 tokens/month for 12 months)
@@ -107,7 +107,7 @@ async function main() {
     .connect(donor2)
     .approve(distributionAddress, schedule2Amount);
   await approveTx2.wait();
-  console.log("✅ Approved token transfer");
+  console.log("[OK] Approved token transfer");
 
   // Create the schedule
   const scheduleTx2 = await distribution
@@ -115,10 +115,10 @@ async function main() {
     .createSchedule(testCharities[1], mockTokenAddress, schedule2Amount);
   await scheduleTx2.wait();
   console.log(
-    `✅ Created schedule: 240 tokens over 12 months to charity ${testCharities[1]}`,
+    `[OK] Created schedule: 240 tokens over 12 months to charity ${testCharities[1]}`,
   );
 
-  console.log("\n✨ Test scheduled donations created successfully!");
+  console.log("\nTest scheduled donations created successfully!");
   console.log("\nYou can now:");
   console.log("1. Log in as a donor account to see the scheduled donations");
   console.log(
@@ -127,7 +127,7 @@ async function main() {
   console.log("3. The schedules will appear on the /scheduled-donations page");
 
   // Display schedule details
-  console.log("\n📊 Created Schedules Summary:");
+  console.log("\nCreated Schedules Summary:");
   console.log("Schedule 1:");
   console.log(`  - Donor: ${donor1.address}`);
   console.log(`  - Charity: ${testCharities[0]}`);
@@ -145,9 +145,9 @@ async function main() {
 
 main()
   .then(() => {
-    console.log("\n✅ Script completed successfully");
+    console.log("\n[OK] Script completed successfully");
   })
   .catch((error) => {
-    console.error("\n❌ Script failed:", error);
+    console.error("\n[ERROR] Script failed:", error);
     throw error;
   });
