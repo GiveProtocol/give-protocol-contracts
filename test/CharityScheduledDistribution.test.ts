@@ -1,7 +1,6 @@
-const { expect } = require("chai");
-const { ethers } = require("hardhat");
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const { Contract } = require("ethers");
+import { expect } from "chai";
+import hre from "hardhat";
+const { ethers } = hre;
 
 describe("CharityScheduledDistribution", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
