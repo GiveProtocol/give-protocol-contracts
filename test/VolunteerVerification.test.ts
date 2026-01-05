@@ -1,14 +1,17 @@
-import { expect } from "chai";
-import { ethers } from "hardhat";
-import { Contract } from "ethers";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
 
 describe("VolunteerVerification", () => {
-  let verification: Contract;
-  let _owner: SignerWithAddress;
-  let charity: SignerWithAddress;
-  let applicant: SignerWithAddress;
-  let volunteer: SignerWithAddress;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let verification: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let _owner: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let charity: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let applicant: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let volunteer: any;
 
   beforeEach(async () => {
     [_owner, charity, applicant, volunteer] = await ethers.getSigners();
@@ -22,15 +25,14 @@ describe("VolunteerVerification", () => {
 
   describe("Charity Registration", () => {
     it("Should allow owner to register a charity", async () => {
-      const latestBlock = await ethers.provider.getBlock("latest");
-      if (!latestBlock) {
-        throw new Error("Could not get latest block");
-      }
-      const expectedTimestamp = latestBlock.timestamp;
+      // Execute the transaction and check event was emitted
+      const tx = await verification.registerCharity(charity.address);
+      const receipt = await tx.wait();
+      const block = await ethers.provider.getBlock(receipt.blockNumber);
 
-      await expect(verification.registerCharity(charity.address))
+      await expect(tx)
         .to.emit(verification, "CharityRegistered")
-        .withArgs(charity.address, expectedTimestamp);
+        .withArgs(charity.address, block.timestamp);
 
       const charityInfo = await verification.charities(charity.address);
       expect(charityInfo.isRegistered).to.equal(true);
@@ -57,17 +59,19 @@ describe("VolunteerVerification", () => {
     });
 
     it("Should allow charity to verify an application", async () => {
-      await expect(
-        verification
-          .connect(charity)
-          .verifyApplication(applicationHash, applicant.address),
-      )
+      const tx = await verification
+        .connect(charity)
+        .verifyApplication(applicationHash, applicant.address);
+      const receipt = await tx.wait();
+      const block = await ethers.provider.getBlock(receipt.blockNumber);
+
+      await expect(tx)
         .to.emit(verification, "ApplicationVerified")
         .withArgs(
           applicationHash,
           applicant.address,
           charity.address,
-          await ethers.provider.getBlock("latest").then((b) => b.timestamp),
+          block.timestamp,
         );
 
       const app =
@@ -107,18 +111,20 @@ describe("VolunteerVerification", () => {
     });
 
     it("Should allow charity to verify volunteer hours", async () => {
-      await expect(
-        verification
-          .connect(charity)
-          .verifyHours(hoursHash, volunteer.address, hours),
-      )
+      const tx = await verification
+        .connect(charity)
+        .verifyHours(hoursHash, volunteer.address, hours);
+      const receipt = await tx.wait();
+      const block = await ethers.provider.getBlock(receipt.blockNumber);
+
+      await expect(tx)
         .to.emit(verification, "HoursVerified")
         .withArgs(
           hoursHash,
           volunteer.address,
           charity.address,
           hours,
-          await ethers.provider.getBlock("latest").then((b) => b.timestamp),
+          block.timestamp,
         );
 
       const hoursVerification =
@@ -126,7 +132,7 @@ describe("VolunteerVerification", () => {
       expect(hoursVerification.isVerified).to.equal(true);
       expect(hoursVerification.volunteer).to.equal(volunteer.address);
       expect(hoursVerification.charity).to.equal(charity.address);
-      expect(hoursVerification.hours).to.equal(hours);
+      expect(hoursVerification.hoursWorked).to.equal(hours);
     });
 
     it("Should not allow non-charity to verify hours", async () => {
@@ -191,11 +197,12 @@ describe("VolunteerVerification", () => {
         ethers.toUtf8Bytes("application3"),
       );
 
+      // OpenZeppelin 5.x uses custom error EnforcedPause()
       await expect(
         verification
           .connect(charity)
           .verifyApplication(applicationHash, applicant.address),
-      ).to.be.revertedWith("Pausable: paused");
+      ).to.be.revertedWithCustomError(verification, "EnforcedPause");
 
       await verification.unpause();
 

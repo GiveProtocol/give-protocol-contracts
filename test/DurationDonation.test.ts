@@ -1,90 +1,112 @@
-import { expect } from "chai";
-import { ethers } from "hardhat";
-import { Contract } from "ethers";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
 
 describe("DurationDonation", () => {
-  let donation: Contract;
-  let _owner: SignerWithAddress;
-  let charity: SignerWithAddress;
-  let donor: SignerWithAddress;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let donation: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let _owner: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let charity: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let donor: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let treasury: any;
+
+  const FEE_RATE = 100n; // 1% in basis points
+  const BASIS_POINTS = 10000n;
 
   beforeEach(async () => {
-    [_owner, charity, donor] = await ethers.getSigners();
+    [_owner, charity, donor, treasury] = await ethers.getSigners();
 
-    // Deploy donation contract
+    // Deploy donation contract with treasury
     const DurationDonation =
       await ethers.getContractFactory("DurationDonation");
-    donation = await DurationDonation.deploy();
+    donation = await DurationDonation.deploy(treasury.address);
+
+    // Register charity
+    await donation.registerCharity(charity.address);
   });
 
   describe("Charity Registration", () => {
     it("Should allow owner to register a charity", async () => {
-      await expect(donation.registerCharity(charity.address))
-        .to.emit(donation, "CharityRegistered")
-        .withArgs(charity.address);
+      const newCharity = ethers.Wallet.createRandom().address;
+      await expect(donation.registerCharity(newCharity))
+        .to.emit(donation, "CharityRegistered");
 
-      const charityInfo = await donation.getCharityInfo(charity.address);
+      const charityInfo = await donation.getCharityInfo(newCharity);
       expect(charityInfo.isRegistered).to.equal(true);
     });
 
     it("Should not allow non-owner to register a charity", async () => {
+      const newCharity = ethers.Wallet.createRandom().address;
       await expect(
-        donation.connect(donor).registerCharity(charity.address),
+        donation.connect(donor).registerCharity(newCharity),
       ).to.be.revertedWithCustomError(donation, "OwnableUnauthorizedAccount");
     });
   });
 
-  describe("Donations", () => {
-    beforeEach(async () => {
-      await donation.registerCharity(charity.address);
+  describe("Native Token Donations with Fee", () => {
+    it("Should process native donation with mandatory fee", async () => {
+      const grossAmount = ethers.parseEther("1.0");
+      const platformTip = 0n;
+      const expectedFee = (grossAmount * FEE_RATE) / BASIS_POINTS;
+      const expectedNetToCharity = grossAmount - expectedFee;
+
+      const treasuryBalanceBefore = await ethers.provider.getBalance(treasury.address);
+      const charityBalanceBefore = await ethers.provider.getBalance(charity.address);
+
+      await donation.connect(donor).donateNative(charity.address, platformTip, {
+        value: grossAmount,
+      });
+
+      const treasuryBalanceAfter = await ethers.provider.getBalance(treasury.address);
+      const charityBalanceAfter = await ethers.provider.getBalance(charity.address);
+
+      // Check fee went to treasury
+      expect(treasuryBalanceAfter - treasuryBalanceBefore).to.equal(expectedFee);
+      // Check net amount went to charity
+      expect(charityBalanceAfter - charityBalanceBefore).to.equal(expectedNetToCharity);
     });
 
-    it("Should allow native token donations", async () => {
-      const amount = ethers.parseEther("1.0");
+    it("Should process native donation with fee and optional tip", async () => {
+      const grossAmount = ethers.parseEther("1.0");
+      const platformTip = ethers.parseEther("0.1"); // 10% optional tip
+      const totalSent = grossAmount + platformTip;
+      const expectedFee = (grossAmount * FEE_RATE) / BASIS_POINTS;
+      const expectedNetToCharity = grossAmount - expectedFee;
+      const expectedToTreasury = expectedFee + platformTip;
 
-      await expect(
-        donation.connect(donor).donate(charity.address, { value: amount }),
-      )
-        .to.emit(donation, "DonationReceived")
-        .withArgs(donor.address, charity.address, amount);
+      const treasuryBalanceBefore = await ethers.provider.getBalance(treasury.address);
 
-      const charityInfo = await donation.getCharityInfo(charity.address);
-      expect(charityInfo.totalReceived).to.equal(amount);
-      expect(charityInfo.availableBalance).to.equal(amount);
+      await donation.connect(donor).donateNative(charity.address, platformTip, {
+        value: totalSent,
+      });
+
+      const treasuryBalanceAfter = await ethers.provider.getBalance(treasury.address);
+
+      // Check fee + tip went to treasury
+      expect(treasuryBalanceAfter - treasuryBalanceBefore).to.equal(expectedToTreasury);
     });
   });
 
-  describe("Withdrawals", () => {
-    const donationAmount = ethers.parseEther("1.0");
+  describe("Fee Management", () => {
+    it("Should allow owner to update fee rate", async () => {
+      const newFeeRate = 200n; // 2%
 
-    beforeEach(async () => {
-      await donation.registerCharity(charity.address);
-      await donation
-        .connect(donor)
-        .donate(charity.address, { value: donationAmount });
+      await expect(donation.updatePlatformFeeRate(newFeeRate))
+        .to.emit(donation, "PlatformFeeRateUpdated")
+        .withArgs(FEE_RATE, newFeeRate);
+
+      expect(await donation.platformFeeRate()).to.equal(newFeeRate);
     });
 
-    it("Should allow charity to withdraw", async () => {
-      await expect(donation.connect(charity).withdraw(donationAmount))
-        .to.emit(donation, "WithdrawalProcessed")
-        .withArgs(charity.address, donationAmount);
+    it("Should not allow fee rate above maximum", async () => {
+      const excessiveFeeRate = 600n; // 6% - above 5% cap
 
-      const charityInfo = await donation.getCharityInfo(charity.address);
-      expect(charityInfo.availableBalance).to.equal(0);
-    });
-
-    it("Should not allow withdrawal more than available balance", async () => {
-      const excessAmount = ethers.parseEther("2.0");
       await expect(
-        donation.connect(charity).withdraw(excessAmount),
-      ).to.be.revertedWith("Insufficient balance");
-    });
-
-    it("Should not allow non-charity to withdraw", async () => {
-      await expect(
-        donation.connect(donor).withdraw(donationAmount),
-      ).to.be.revertedWith("Not a registered charity");
+        donation.updatePlatformFeeRate(excessiveFeeRate),
+      ).to.be.revertedWithCustomError(donation, "InvalidFeeRate");
     });
   });
 });

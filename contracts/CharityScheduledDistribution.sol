@@ -37,12 +37,24 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
     
     // Verified charities
     mapping(address => bool) public verifiedCharities;
-    
+
+    // Platform fee settings
+    address public treasury;
+    uint256 public platformFeeRate = 100; // 1% in basis points (100/10000 = 1%)
+    uint256 public constant MAX_FEE_RATE = 500; // Cap at 5%
+    uint256 public constant BASIS_POINTS = 10000;
+
     // Distribution interval (30 days in seconds)
     uint256 public constant DISTRIBUTION_INTERVAL = 30 days;
-    
-    // Minimum token value in USD (42 USD with 8 decimals for compatibility)
-    uint256 public constant MIN_TOKEN_VALUE_USD = 42 * 10**8;
+
+    // Minimum donation amount in USD (10 USD with 8 decimals)
+    uint256 public constant MIN_DONATION_USD = 10 * 10**8;
+
+    // Maximum number of months allowed
+    uint256 public constant MAX_MONTHS = 60;
+
+    // Minimum number of months allowed
+    uint256 public constant MIN_MONTHS = 1;
     
     // Events
     event CharityAdded(address indexed charity);
@@ -65,11 +77,18 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         uint256 monthsRemaining
     );
     event ScheduleCancelled(uint256 indexed scheduleId);
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event PlatformFeeRateUpdated(uint256 oldRate, uint256 newRate);
+    event PlatformFeeCollected(uint256 indexed scheduleId, address token, uint256 feeAmount);
     
     /**
      * @dev Constructor
+     * @param _treasury Address of the platform treasury for fee collection
      */
-    constructor() Ownable(msg.sender) {}
+    constructor(address _treasury) Ownable(msg.sender) {
+        require(_treasury != address(0), "Invalid treasury address");
+        treasury = _treasury;
+    }
     
     /**
      * @dev Add a verified charity
@@ -117,28 +136,37 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
      * @dev Create a new monthly distribution schedule
      * @param charity The charity address
      * @param token The token address
-     * @param totalAmount The total amount to distribute
+     * @param totalAmount The total amount to distribute (in token's smallest unit)
+     * @param numberOfMonths The number of months to distribute over (1-60)
+     * @param tokenPriceUSD The current token price in USD (8 decimals, e.g., 1 USD = 100000000)
      */
     function createSchedule(
-        address charity, 
-        address token, 
-        uint256 totalAmount
+        address charity,
+        address token,
+        uint256 totalAmount,
+        uint256 numberOfMonths,
+        uint256 tokenPriceUSD
     ) external nonReentrant whenNotPaused {
         require(verifiedCharities[charity], "Charity not verified");
-        require(tokenPrices[token] > 0, "Token not supported");
         require(totalAmount > 0, "Amount must be > 0");
-        
-        // Verify token price is > 42 USD
-        uint256 tokenPrice = getTokenPrice(token);
-        require(tokenPrice >= MIN_TOKEN_VALUE_USD, "Token value below minimum");
-        
-        // Calculate monthly distribution (totalAmount / 12)
-        uint256 amountPerMonth = totalAmount / 12;
+        require(numberOfMonths >= MIN_MONTHS && numberOfMonths <= MAX_MONTHS, "Invalid number of months");
+        require(tokenPriceUSD > 0, "Token price must be > 0");
+
+        // Calculate total donation value in USD (with 8 decimals)
+        // totalAmount is in token's smallest unit (e.g., wei for 18 decimal tokens)
+        // We need to adjust for token decimals. Assuming 18 decimals for most ERC20 tokens
+        uint256 totalValueUSD = (totalAmount * tokenPriceUSD) / 1e18;
+
+        // Verify minimum donation amount ($10 USD)
+        require(totalValueUSD >= MIN_DONATION_USD, "Donation below minimum ($10 USD)");
+
+        // Calculate monthly distribution
+        uint256 amountPerMonth = totalAmount / numberOfMonths;
         require(amountPerMonth > 0, "Monthly amount too small");
-        
+
         // Transfer tokens from donor to this contract
         IERC20(token).safeTransferFrom(msg.sender, address(this), totalAmount);
-        
+
         // Create schedule
         uint256 scheduleId = nextScheduleId++;
         donationSchedules[scheduleId] = DonationSchedule({
@@ -147,19 +175,19 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
             token: token,
             totalAmount: totalAmount,
             amountPerMonth: amountPerMonth,
-            monthsRemaining: 12,
+            monthsRemaining: numberOfMonths,
             nextDistributionTimestamp: block.timestamp + DISTRIBUTION_INTERVAL,
             active: true
         });
-        
+
         emit ScheduleCreated(
-            scheduleId, 
-            msg.sender, 
-            charity, 
+            scheduleId,
+            msg.sender,
+            charity,
             token,
-            totalAmount, 
-            amountPerMonth, 
-            12
+            totalAmount,
+            amountPerMonth,
+            numberOfMonths
         );
     }
     
@@ -171,29 +199,39 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         for (uint256 i = 0; i < scheduleIds.length; i++) {
             uint256 scheduleId = scheduleIds[i];
             DonationSchedule storage schedule = donationSchedules[scheduleId];
-            
+
             if (
-                schedule.active && 
-                schedule.monthsRemaining > 0 && 
+                schedule.active &&
+                schedule.monthsRemaining > 0 &&
                 block.timestamp >= schedule.nextDistributionTimestamp
             ) {
-                // Transfer monthly amount to charity
-                IERC20(schedule.token).safeTransfer(schedule.charity, schedule.amountPerMonth);
-                
+                // Calculate platform fee from monthly amount
+                uint256 platformFee = (schedule.amountPerMonth * platformFeeRate) / BASIS_POINTS;
+                uint256 netToCharity = schedule.amountPerMonth - platformFee;
+
+                // Transfer net amount to charity
+                IERC20(schedule.token).safeTransfer(schedule.charity, netToCharity);
+
+                // Transfer platform fee to treasury
+                if (platformFee > 0) {
+                    IERC20(schedule.token).safeTransfer(treasury, platformFee);
+                    emit PlatformFeeCollected(scheduleId, schedule.token, platformFee);
+                }
+
                 // Update schedule
                 schedule.monthsRemaining--;
                 schedule.nextDistributionTimestamp += DISTRIBUTION_INTERVAL;
-                
+
                 // If all months distributed, mark schedule as inactive
                 if (schedule.monthsRemaining == 0) {
                     schedule.active = false;
                 }
-                
+
                 emit DistributionExecuted(
-                    scheduleId, 
-                    schedule.charity, 
+                    scheduleId,
+                    schedule.charity,
                     schedule.token,
-                    schedule.amountPerMonth, 
+                    netToCharity,
                     schedule.monthsRemaining
                 );
             }
@@ -230,26 +268,48 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
      */
     function getDonorSchedules(address donor) external view returns (uint256[] memory) {
         uint256 count = 0;
-        
-        // Count schedules
-        for (uint256 i = 1; i < nextScheduleId; i++) {
+
+        // Count schedules (start from 0, not 1)
+        for (uint256 i = 0; i < nextScheduleId; i++) {
             if (donationSchedules[i].donor == donor && donationSchedules[i].active) {
                 count++;
             }
         }
-        
+
         // Populate result
         uint256[] memory result = new uint256[](count);
         uint256 index = 0;
-        
-        for (uint256 i = 1; i < nextScheduleId; i++) {
+
+        for (uint256 i = 0; i < nextScheduleId; i++) {
             if (donationSchedules[i].donor == donor && donationSchedules[i].active) {
                 result[index] = i;
                 index++;
             }
         }
-        
+
         return result;
+    }
+
+    /**
+     * @dev Update treasury address
+     * @param newTreasury New treasury address
+     */
+    function updateTreasury(address newTreasury) external onlyOwner {
+        require(newTreasury != address(0), "Invalid treasury address");
+        address oldTreasury = treasury;
+        treasury = newTreasury;
+        emit TreasuryUpdated(oldTreasury, newTreasury);
+    }
+
+    /**
+     * @dev Update platform fee rate
+     * @param newFeeRate New fee rate in basis points (100 = 1%)
+     */
+    function updatePlatformFeeRate(uint256 newFeeRate) external onlyOwner {
+        require(newFeeRate <= MAX_FEE_RATE, "Fee rate exceeds maximum");
+        uint256 oldRate = platformFeeRate;
+        platformFeeRate = newFeeRate;
+        emit PlatformFeeRateUpdated(oldRate, newFeeRate);
     }
 
     /**

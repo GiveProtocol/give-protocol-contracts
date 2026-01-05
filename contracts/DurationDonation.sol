@@ -43,6 +43,10 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     uint256[] public suggestedTipRates = [500, 1000, 2000]; // 5%, 10%, 20%
     uint256 public constant BASIS_POINTS = 10000;
     uint256 public constant MINIMUM_DONATION = 1e15; // 0.001 tokens minimum
+
+    // Mandatory platform fee (in basis points, 100 = 1%)
+    uint256 public platformFeeRate = 100;
+    uint256 public constant MAX_FEE_RATE = 500; // Cap at 5%
     
     // Events
     event CharityRegistered(address indexed charity, uint256 timestamp);
@@ -59,6 +63,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     );
     event TaxReceiptGenerated(bytes32 indexed receiptId, address indexed donor);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event PlatformFeeRateUpdated(uint256 oldRate, uint256 newRate);
     
     // Errors
     error CharityNotRegistered(address charity);
@@ -66,6 +71,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     error InvalidAmount(uint256 amount, string reason);
     error InvalidTipOption(uint8 tipOption);
     error TransferFailed(address token, address from, address to, uint256 amount);
+    error InvalidFeeRate(uint256 rate);
     
     constructor(address _giveProtocolTreasury) Ownable(msg.sender) {
         require(_giveProtocolTreasury != address(0), "Invalid treasury address");
@@ -114,13 +120,26 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
         giveProtocolTreasury = newTreasury;
         emit TreasuryUpdated(oldTreasury, newTreasury);
     }
+
+    /**
+     * @dev Update platform fee rate
+     * @param newFeeRate New fee rate in basis points (100 = 1%)
+     */
+    function updatePlatformFeeRate(uint256 newFeeRate) external onlyOwner {
+        if (newFeeRate > MAX_FEE_RATE) {
+            revert InvalidFeeRate(newFeeRate);
+        }
+        uint256 oldRate = platformFeeRate;
+        platformFeeRate = newFeeRate;
+        emit PlatformFeeRateUpdated(oldRate, newFeeRate);
+    }
     
     /**
-     * @dev Process donation with integrated optional platform tip
+     * @dev Process donation with mandatory platform fee and optional tip
      * @param charity The verified charity receiving the donation
      * @param token The ERC20 token being donated
-     * @param charityAmount Amount going to the charity
-     * @param platformTip Amount supporting Give Protocol (also tax-deductible)
+     * @param charityAmount Gross amount intended for charity (fee will be deducted)
+     * @param platformTip Additional optional amount supporting Give Protocol (also tax-deductible)
      */
     function processDonation(
         address charity,
@@ -131,51 +150,55 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
         if (!charities[charity].isRegistered) {
             revert CharityNotRegistered(charity);
         }
-        
+
         if (!charities[charity].isActive) {
             revert CharityNotActive(charity);
         }
-        
+
         if (charityAmount < MINIMUM_DONATION) {
             revert InvalidAmount(charityAmount, "Donation amount too small");
         }
-        
+
+        // Calculate mandatory platform fee
+        uint256 mandatoryFee = (charityAmount * platformFeeRate) / BASIS_POINTS;
+        uint256 netToCharity = charityAmount - mandatoryFee;
+        uint256 totalToTreasury = mandatoryFee + platformTip;
         uint256 totalAmount = charityAmount + platformTip;
-        
-        // Transfer to charity
-        IERC20(token).safeTransferFrom(msg.sender, charity, charityAmount);
-        
-        // Transfer tip to Give Protocol if provided
-        if (platformTip > 0) {
-            IERC20(token).safeTransferFrom(msg.sender, giveProtocolTreasury, platformTip);
+
+        // Transfer net amount to charity
+        IERC20(token).safeTransferFrom(msg.sender, charity, netToCharity);
+
+        // Transfer mandatory fee + optional tip to Give Protocol treasury
+        if (totalToTreasury > 0) {
+            IERC20(token).safeTransferFrom(msg.sender, giveProtocolTreasury, totalToTreasury);
         }
-        
-        // Update tracking
-        charities[charity].totalReceived += charityAmount;
-        donations[msg.sender][charity] += charityAmount;
-        
+
+        // Update tracking (track net amount received by charity)
+        charities[charity].totalReceived += netToCharity;
+        donations[msg.sender][charity] += netToCharity;
+
         // Generate donation ID
         bytes32 donationId = keccak256(
             abi.encode(msg.sender, charity, totalAmount, block.timestamp)
         );
-        
-        // Generate tax receipt
+
+        // Generate tax receipt (gross charity amount is tax-deductible as it's going to registered charity)
         _generateTaxReceipt(
             donationId,
             msg.sender,
             charity,
-            charityAmount,
-            platformTip,
+            netToCharity,
+            totalToTreasury,
             token
         );
-        
+
         // Emit event - ENTIRE amount is tax-deductible
         emit DonationProcessed(
             msg.sender,
             charity,
             token,
-            charityAmount,
-            platformTip,
+            netToCharity,
+            totalToTreasury,
             totalAmount,
             block.timestamp,
             donationId
@@ -219,6 +242,77 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
         processDonation(charity, token, charityAmount, platformTip);
     }
     
+    /**
+     * @dev Process native token (DEV/GLMR) donation with mandatory fee
+     * @param charity The verified charity
+     * @param platformTip Additional optional amount supporting Give Protocol
+     */
+    function donateNative(
+        address charity,
+        uint256 platformTip
+    ) external payable nonReentrant whenNotPaused {
+        if (!charities[charity].isRegistered) {
+            revert CharityNotRegistered(charity);
+        }
+
+        if (!charities[charity].isActive) {
+            revert CharityNotActive(charity);
+        }
+
+        // Gross charity amount is msg.value minus optional tip
+        uint256 charityAmount = msg.value - platformTip;
+
+        if (charityAmount < MINIMUM_DONATION) {
+            revert InvalidAmount(charityAmount, "Donation amount too small");
+        }
+
+        // Calculate mandatory platform fee
+        uint256 mandatoryFee = (charityAmount * platformFeeRate) / BASIS_POINTS;
+        uint256 netToCharity = charityAmount - mandatoryFee;
+        uint256 totalToTreasury = mandatoryFee + platformTip;
+
+        // Transfer net amount to charity
+        (bool charitySuccess, ) = charity.call{value: netToCharity}("");
+        require(charitySuccess, "Transfer to charity failed");
+
+        // Transfer mandatory fee + optional tip to Give Protocol treasury
+        if (totalToTreasury > 0) {
+            (bool treasurySuccess, ) = giveProtocolTreasury.call{value: totalToTreasury}("");
+            require(treasurySuccess, "Transfer to treasury failed");
+        }
+
+        // Update tracking (track net amount received by charity)
+        charities[charity].totalReceived += netToCharity;
+        donations[msg.sender][charity] += netToCharity;
+
+        // Generate donation ID
+        bytes32 donationId = keccak256(
+            abi.encode(msg.sender, charity, msg.value, block.timestamp)
+        );
+
+        // Generate receipt with address(0) for native token
+        _generateTaxReceipt(
+            donationId,
+            msg.sender,
+            charity,
+            netToCharity,
+            totalToTreasury,
+            address(0) // address(0) indicates native token
+        );
+
+        // Emit event
+        emit DonationProcessed(
+            msg.sender,
+            charity,
+            address(0), // native token
+            netToCharity,
+            totalToTreasury,
+            msg.value,
+            block.timestamp,
+            donationId
+        );
+    }
+
     /**
      * @dev Convenience function to calculate suggested tip amounts
      * @param donationAmount The base donation amount
