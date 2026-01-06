@@ -9,11 +9,7 @@
   "exclude_low": false,
   "exclude_medium": false,
   "exclude_high": false,
-  "filter_paths": [
-    "node_modules",
-    "test",
-    "scripts"
-  ],
+  "filter_paths": "node_modules,test,scripts",
   "compile_force_framework": "hardhat",
   "exclude_optimization": false,
   "hardhat_cache_directory": "cache",

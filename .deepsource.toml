@@ -7,5 +7,7 @@ enabled = true
   [analyzers.meta]
   environment = ["nodejs"]
 
-# Slither is disabled here because it times out during dependency installation.
-# Slither analysis runs via GitHub Actions workflow (.github/workflows/slither.yml) instead.
+[[analyzers]]
+name = "slither"
+enabled = true
+type = "community"
