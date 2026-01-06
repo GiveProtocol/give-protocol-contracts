@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test",
+    "test": "hardhat test test/*.ts",
     "test:coverage": "hardhat coverage",
     "deploy:moonbase": "hardhat run scripts/deploy.ts --network moonbase",
     "deploy:verification": "hardhat run scripts/deploy-verification.ts --network moonbase",
