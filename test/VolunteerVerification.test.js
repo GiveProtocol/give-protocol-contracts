@@ -3,11 +3,11 @@ const hre = require("hardhat");
 const { ethers } = hre;
 
 describe("VolunteerVerification", () => {
-  let verification;
-  let _owner;
-  let charity;
-  let applicant;
-  let volunteer;
+  let verification = null;
+  let _owner = null;
+  let charity = null;
+  let applicant = null;
+  let volunteer = null;
 
   beforeEach(async () => {
     [_owner, charity, applicant, volunteer] = await ethers.getSigners();

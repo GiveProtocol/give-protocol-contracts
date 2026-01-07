@@ -3,11 +3,11 @@ const hre = require("hardhat");
 const { ethers } = hre;
 
 describe("DurationDonation", () => {
-  let donation;
-  let _owner;
-  let charity;
-  let donor;
-  let treasury;
+  let donation = null;
+  let _owner = null;
+  let charity = null;
+  let donor = null;
+  let treasury = null;
 
   const FEE_RATE = 100n; // 1% in basis points
   const BASIS_POINTS = 10000n;

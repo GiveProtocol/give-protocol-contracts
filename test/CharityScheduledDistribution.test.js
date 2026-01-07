@@ -3,13 +3,13 @@ const hre = require("hardhat");
 const { ethers } = hre;
 
 describe("CharityScheduledDistribution", () => {
-  let distribution;
-  let executor;
-  let token;
-  let _owner;
-  let charity;
-  let donor;
-  let treasury;
+  let distribution = null;
+  let executor = null;
+  let token = null;
+  let _owner = null;
+  let charity = null;
+  let donor = null;
+  let treasury = null;
 
   const TOKEN_PRICE = BigInt(100 * 10 ** 8); // $100 USD with 8 decimals
   const TOTAL_AMOUNT = ethers.parseEther("12.0"); // 12 tokens
