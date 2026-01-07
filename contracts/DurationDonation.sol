@@ -271,26 +271,16 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
         uint256 netToCharity = charityAmount - mandatoryFee;
         uint256 totalToTreasury = mandatoryFee + platformTip;
 
-        // Transfer net amount to charity
-        (bool charitySuccess, ) = charity.call{value: netToCharity}("");
-        require(charitySuccess, "Transfer to charity failed");
-
-        // Transfer mandatory fee + optional tip to Give Protocol treasury
-        if (totalToTreasury > 0) {
-            (bool treasurySuccess, ) = giveProtocolTreasury.call{value: totalToTreasury}("");
-            require(treasurySuccess, "Transfer to treasury failed");
-        }
-
-        // Update tracking (track net amount received by charity)
-        charities[charity].totalReceived += netToCharity;
-        donations[msg.sender][charity] += netToCharity;
-
         // Generate donation ID
         bytes32 donationId = keccak256(
             abi.encode(msg.sender, charity, msg.value, block.timestamp)
         );
 
-        // Generate receipt with address(0) for native token
+        // Update tracking BEFORE external calls (checks-effects-interactions pattern)
+        charities[charity].totalReceived += netToCharity;
+        donations[msg.sender][charity] += netToCharity;
+
+        // Generate receipt (state update)
         _generateTaxReceipt(
             donationId,
             msg.sender,
@@ -299,6 +289,16 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
             totalToTreasury,
             address(0) // address(0) indicates native token
         );
+
+        // Transfer net amount to charity (external call AFTER state updates)
+        (bool charitySuccess, ) = charity.call{value: netToCharity}("");
+        require(charitySuccess, "Transfer to charity failed");
+
+        // Transfer mandatory fee + optional tip to Give Protocol treasury
+        if (totalToTreasury > 0) {
+            (bool treasurySuccess, ) = giveProtocolTreasury.call{value: totalToTreasury}("");
+            require(treasurySuccess, "Transfer to treasury failed");
+        }
 
         // Emit event
         emit DonationProcessed(

@@ -178,24 +178,24 @@ contract PortfolioFunds is ReentrancyGuard, AccessControl, Pausable {
         require(msg.value > 0, "Amount must be greater than 0");
         PortfolioFund storage fund = portfolioFunds[fundId];
         require(fund.active, "Fund not active");
-        
+
         // Calculate platform fee (1%)
         uint256 platformFee = (msg.value * platformFeeRate) / 10000;
         uint256 netAmount = msg.value - platformFee;
-        
-        // Transfer platform fee to treasury
+
+        // Update fund balances BEFORE external calls (checks-effects-interactions pattern)
+        fund.tokenBalances[address(0)] += netAmount;
+        fund.totalRaised += netAmount;
+
+        // Allocate to charities (state update)
+        _allocateToCharities(fundId, address(0), netAmount);
+
+        // Transfer platform fee to treasury (external call AFTER state updates)
         if (platformFee > 0) {
             (bool success, ) = treasury.call{value: platformFee}("");
             require(success, "Treasury transfer failed");
         }
-        
-        // Update fund balances (address(0) represents native currency)
-        fund.tokenBalances[address(0)] += netAmount;
-        fund.totalRaised += netAmount;
-        
-        // Allocate to charities
-        _allocateToCharities(fundId, address(0), netAmount);
-        
+
         emit DonationReceived(fundId, msg.sender, address(0), msg.value, platformFee, netAmount);
         emit FundsAllocated(fundId, address(0), netAmount);
     }
@@ -275,28 +275,35 @@ contract PortfolioFunds is ReentrancyGuard, AccessControl, Pausable {
         address[] memory tokens
     ) external nonReentrant {
         require(tokens.length > 0 && tokens.length <= 10, "Invalid token count");
-        
+
+        // First pass: collect amounts and update ALL state (checks-effects-interactions pattern)
+        uint256[] memory amounts = new uint256[](tokens.length);
         for (uint i = 0; i < tokens.length; i++) {
             uint256 claimableAmount = portfolioFunds[fundId].charityAllocations[msg.sender][tokens[i]];
             if (claimableAmount > 0) {
-                // Reset allocation
+                amounts[i] = claimableAmount;
+                // Update all state before any external calls
                 portfolioFunds[fundId].charityAllocations[msg.sender][tokens[i]] = 0;
                 portfolioFunds[fundId].charityClaimed[msg.sender][tokens[i]] += claimableAmount;
                 portfolioFunds[fundId].totalDistributed += claimableAmount;
-                
-                // Transfer funds
+            }
+        }
+
+        // Second pass: make all external transfers AFTER state updates
+        for (uint i = 0; i < tokens.length; i++) {
+            if (amounts[i] > 0) {
                 if (tokens[i] == address(0)) {
-                    (bool success, ) = msg.sender.call{value: claimableAmount}("");
+                    (bool success, ) = msg.sender.call{value: amounts[i]}("");
                     require(success, "Native transfer failed");
                 } else {
-                    IERC20(tokens[i]).safeTransfer(msg.sender, claimableAmount);
+                    IERC20(tokens[i]).safeTransfer(msg.sender, amounts[i]);
                 }
-                
+
                 emit CharityClaimedFunds(
-                    fundId, 
-                    msg.sender, 
-                    tokens[i], 
-                    claimableAmount,
+                    fundId,
+                    msg.sender,
+                    tokens[i],
+                    amounts[i],
                     portfolioFunds[fundId].charityClaimed[msg.sender][tokens[i]]
                 );
             }
