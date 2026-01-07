@@ -1,6 +1,6 @@
 const hre = require("hardhat");
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 // Test charity addresses for Moonbase Alpha
 // In production, these should be real charity wallet addresses
