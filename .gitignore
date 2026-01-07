@@ -23,3 +23,10 @@ build
 # OS
 .DS_Store
 Thumbs.db
+
+# Python virtual environment
+.venv
+
+# Generated files
+gas-report.txt
+tsconfig.json

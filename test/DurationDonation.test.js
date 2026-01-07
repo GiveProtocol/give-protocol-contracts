@@ -1,18 +1,13 @@
-import { expect } from "chai";
-import hre from "hardhat";
+const { expect } = require("chai");
+const hre = require("hardhat");
 const { ethers } = hre;
 
 describe("DurationDonation", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let donation: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let _owner: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let charity: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let donor: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let treasury: any;
+  let donation;
+  let _owner;
+  let charity;
+  let donor;
+  let treasury;
 
   const FEE_RATE = 100n; // 1% in basis points
   const BASIS_POINTS = 10000n;

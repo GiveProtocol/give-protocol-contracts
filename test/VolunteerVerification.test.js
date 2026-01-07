@@ -1,18 +1,13 @@
-import { expect } from "chai";
-import hre from "hardhat";
+const { expect } = require("chai");
+const hre = require("hardhat");
 const { ethers } = hre;
 
 describe("VolunteerVerification", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let verification: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let _owner: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let charity: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let applicant: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let volunteer: any;
+  let verification;
+  let _owner;
+  let charity;
+  let applicant;
+  let volunteer;
 
   beforeEach(async () => {
     [_owner, charity, applicant, volunteer] = await ethers.getSigners();

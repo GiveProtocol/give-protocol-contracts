@@ -1,22 +1,15 @@
-import { expect } from "chai";
-import hre from "hardhat";
+const { expect } = require("chai");
+const hre = require("hardhat");
 const { ethers } = hre;
 
 describe("CharityScheduledDistribution", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let distribution: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let executor: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let token: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let _owner: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let charity: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let donor: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let treasury: any;
+  let distribution;
+  let executor;
+  let token;
+  let _owner;
+  let charity;
+  let donor;
+  let treasury;
 
   const TOKEN_PRICE = BigInt(100 * 10 ** 8); // $100 USD with 8 decimals
   const TOTAL_AMOUNT = ethers.parseEther("12.0"); // 12 tokens
