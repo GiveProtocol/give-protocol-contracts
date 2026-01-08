@@ -11,9 +11,6 @@ on:
       - develop
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 env:
   NODE_VERSION: '20'
 
@@ -21,6 +18,8 @@ jobs:
   test:
     name: Hardhat Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 30
 
     steps:
@@ -56,6 +55,8 @@ jobs:
   lint:
     name: Solidity Linting
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
 
     steps:
@@ -77,6 +78,8 @@ jobs:
   compile:
     name: Contract Compilation
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 10
 
     steps:
