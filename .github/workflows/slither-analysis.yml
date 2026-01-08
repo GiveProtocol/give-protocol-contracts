@@ -13,14 +13,13 @@ on:
     - cron: '0 2 * * *'  # Daily at 2 AM UTC
   workflow_dispatch:
 
-permissions:
-  contents: read
-  security-events: write
-
 jobs:
   slither:
     name: Slither Static Analysis
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     timeout-minutes: 20
 
     steps:
@@ -97,6 +96,14 @@ jobs:
           name: slither-results
           path: slither-results.sarif
           retention-days: 30
+
+      - name: Upload SARIF to DeepSource
+        if: steps.slither.outputs.sarif_exists == 'true' && env.DEEPSOURCE_DSN != ''
+        run: |
+          curl -sSL https://deepsource.io/cli | sh
+          ./bin/deepsource report --analyzer slither --analyzer-type community --value-file slither-results.sarif
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
 
       - name: Generate JSON report
         if: always()
