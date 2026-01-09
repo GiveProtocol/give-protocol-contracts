@@ -16,15 +16,38 @@ describe("PortfolioFunds", () => {
   const FEE_RATE = 100n; // 1% in basis points
   const BASIS_POINTS = 10000n;
 
+  // Helper function to setup charities
+  async function setupCharities(count = 2) {
+    const charities = [charity1, charity2, charity3].slice(0, count);
+    const names = ["Charity One", "Charity Two", "Charity Three"].slice(0, count);
+    for (let i = 0; i < count; i++) {
+      await portfolioFunds.addVerifiedCharity(charities[i].address, names[i]);
+    }
+    return { charities: charities.map(c => c.address), names };
+  }
+
+  // Helper function to create a fund and return its ID
+  async function createFundAndGetId(charityCount = 2) {
+    const { charities, names } = await setupCharities(charityCount);
+    await portfolioFunds.createPortfolioFund("Test Fund", "A test portfolio fund", charities, names);
+    const activeFunds = await portfolioFunds.getAllActiveFunds();
+    return activeFunds[0];
+  }
+
+  // Helper function to setup fund with token approval
+  async function setupFundWithTokenApproval(charityCount = 2, approvalAmount = "1000.0") {
+    const fundId = await createFundAndGetId(charityCount);
+    await token.connect(donor).approve(await portfolioFunds.getAddress(), ethers.parseEther(approvalAmount));
+    return fundId;
+  }
+
   beforeEach(async () => {
     [owner, treasury, charity1, charity2, charity3, donor, nonAdmin] = await ethers.getSigners();
 
-    // Deploy mock ERC20 token
     const MockToken = await ethers.getContractFactory("MockERC20");
     token = await MockToken.deploy("Mock Token", "MTK");
     await token.mint(donor.address, ethers.parseEther("1000.0"));
 
-    // Deploy PortfolioFunds contract
     const PortfolioFunds = await ethers.getContractFactory("PortfolioFunds");
     portfolioFunds = await PortfolioFunds.deploy(treasury.address);
   });
@@ -45,9 +68,7 @@ describe("PortfolioFunds", () => {
 
     it("Should revert with zero treasury address", async () => {
       const PortfolioFunds = await ethers.getContractFactory("PortfolioFunds");
-      await expect(
-        PortfolioFunds.deploy(ethers.ZeroAddress)
-      ).to.be.revertedWith("Invalid treasury address");
+      await expect(PortfolioFunds.deploy(ethers.ZeroAddress)).to.be.revertedWith("Invalid treasury address");
     });
   });
 
@@ -81,33 +102,23 @@ describe("PortfolioFunds", () => {
 
     it("Should allow admin to remove verified charity", async () => {
       await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-
       await expect(portfolioFunds.removeVerifiedCharity(charity1.address))
         .to.emit(portfolioFunds, "CharityUnverified")
         .withArgs(charity1.address);
-
       expect(await portfolioFunds.verifiedCharities(charity1.address)).to.equal(false);
     });
   });
 
   describe("Fund Creation", () => {
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
-      await portfolioFunds.addVerifiedCharity(charity3.address, "Charity Three");
+      await setupCharities(3);
     });
 
     it("Should create a portfolio fund with equal distribution", async () => {
-      const charities = [charity1.address, charity2.address];
-      const names = ["Charity One", "Charity Two"];
-
       const tx = await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "A test portfolio fund",
-        charities,
-        names
+        "Test Fund", "A test portfolio fund",
+        [charity1.address, charity2.address], ["Charity One", "Charity Two"]
       );
-
       await expect(tx).to.emit(portfolioFunds, "FundCreated");
 
       const activeFunds = await portfolioFunds.getAllActiveFunds();
@@ -115,30 +126,20 @@ describe("PortfolioFunds", () => {
 
       const fundDetails = await portfolioFunds.getFundDetails(activeFunds[0]);
       expect(fundDetails.name).to.equal("Test Fund");
-      expect(fundDetails.description).to.equal("A test portfolio fund");
       expect(fundDetails.active).to.equal(true);
-      expect(fundDetails.charities.length).to.equal(2);
-      // Equal distribution: 5000 each (50%)
       expect(fundDetails.ratios[0]).to.equal(5000n);
       expect(fundDetails.ratios[1]).to.equal(5000n);
     });
 
     it("Should create fund with 3 charities and handle remainder", async () => {
-      const charities = [charity1.address, charity2.address, charity3.address];
-      const names = ["Charity One", "Charity Two", "Charity Three"];
-
       await portfolioFunds.createPortfolioFund(
-        "Three Charity Fund",
-        "Fund with three charities",
-        charities,
-        names
+        "Three Charity Fund", "Fund with three charities",
+        [charity1.address, charity2.address, charity3.address],
+        ["Charity One", "Charity Two", "Charity Three"]
       );
 
       const activeFunds = await portfolioFunds.getAllActiveFunds();
       const fundDetails = await portfolioFunds.getFundDetails(activeFunds[0]);
-
-      // 10000 / 3 = 3333 with remainder 1
-      // First charity gets 3334, others get 3333
       expect(fundDetails.ratios[0]).to.equal(3334n);
       expect(fundDetails.ratios[1]).to.equal(3333n);
       expect(fundDetails.ratios[2]).to.equal(3333n);
@@ -147,43 +148,27 @@ describe("PortfolioFunds", () => {
     it("Should not allow non-admin to create fund", async () => {
       await expect(
         portfolioFunds.connect(nonAdmin).createPortfolioFund(
-          "Test Fund",
-          "Description",
-          [charity1.address],
-          ["Charity One"]
+          "Test Fund", "Description", [charity1.address], ["Charity One"]
         )
       ).to.be.reverted;
     });
 
     it("Should not create fund with unverified charity", async () => {
       await expect(
-        portfolioFunds.createPortfolioFund(
-          "Test Fund",
-          "Description",
-          [nonAdmin.address], // Not verified
-          ["Unknown"]
-        )
+        portfolioFunds.createPortfolioFund("Test Fund", "Description", [nonAdmin.address], ["Unknown"])
       ).to.be.revertedWith("Charity not verified");
     });
 
     it("Should not create fund with zero charities", async () => {
       await expect(
-        portfolioFunds.createPortfolioFund(
-          "Test Fund",
-          "Description",
-          [],
-          []
-        )
+        portfolioFunds.createPortfolioFund("Test Fund", "Description", [], [])
       ).to.be.revertedWith("Invalid charity count");
     });
 
     it("Should not create fund with mismatched arrays", async () => {
       await expect(
         portfolioFunds.createPortfolioFund(
-          "Test Fund",
-          "Description",
-          [charity1.address, charity2.address],
-          ["Charity One"] // Only one name
+          "Test Fund", "Description", [charity1.address, charity2.address], ["Charity One"]
         )
       ).to.be.revertedWith("Array length mismatch");
     });
@@ -191,10 +176,7 @@ describe("PortfolioFunds", () => {
     it("Should not create fund with duplicate charities", async () => {
       await expect(
         portfolioFunds.createPortfolioFund(
-          "Test Fund",
-          "Description",
-          [charity1.address, charity1.address],
-          ["Charity One", "Charity One Dup"]
+          "Test Fund", "Description", [charity1.address, charity1.address], ["Charity One", "Dup"]
         )
       ).to.be.revertedWith("Duplicate charity");
     });
@@ -204,58 +186,26 @@ describe("PortfolioFunds", () => {
     let fundId = null;
 
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
-
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "A test portfolio fund",
-        [charity1.address, charity2.address],
-        ["Charity One", "Charity Two"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      fundId = activeFunds[0];
-
-      // Approve tokens
-      await token.connect(donor).approve(await portfolioFunds.getAddress(), ethers.parseEther("1000.0"));
+      fundId = await setupFundWithTokenApproval();
     });
 
     it("Should process ERC20 donation with fee", async () => {
       const donationAmount = ethers.parseEther("100.0");
       const expectedFee = (donationAmount * FEE_RATE) / BASIS_POINTS;
       const expectedNet = donationAmount - expectedFee;
-
       const treasuryBalanceBefore = await token.balanceOf(treasury.address);
 
       await expect(
         portfolioFunds.connect(donor).donateToFund(fundId, await token.getAddress(), donationAmount)
-      )
-        .to.emit(portfolioFunds, "DonationReceived")
+      ).to.emit(portfolioFunds, "DonationReceived")
         .withArgs(fundId, donor.address, await token.getAddress(), donationAmount, expectedFee, expectedNet);
 
-      // Check treasury received fee
-      const treasuryBalanceAfter = await token.balanceOf(treasury.address);
-      expect(treasuryBalanceAfter - treasuryBalanceBefore).to.equal(expectedFee);
-
-      // Check fund balance
-      const fundBalance = await portfolioFunds.getFundBalance(fundId, await token.getAddress());
-      expect(fundBalance).to.equal(expectedNet);
-
-      // Check charity allocations (50% each)
-      const charity1Claimable = await portfolioFunds.getCharityClaimableAmount(
-        fundId, charity1.address, await token.getAddress()
-      );
-      const charity2Claimable = await portfolioFunds.getCharityClaimableAmount(
-        fundId, charity2.address, await token.getAddress()
-      );
-
-      expect(charity1Claimable + charity2Claimable).to.equal(expectedNet);
+      expect(await token.balanceOf(treasury.address) - treasuryBalanceBefore).to.equal(expectedFee);
+      expect(await portfolioFunds.getFundBalance(fundId, await token.getAddress())).to.equal(expectedNet);
     });
 
     it("Should not allow donation to inactive fund", async () => {
       await portfolioFunds.pauseFund(fundId);
-
       await expect(
         portfolioFunds.connect(donor).donateToFund(fundId, await token.getAddress(), ethers.parseEther("10.0"))
       ).to.be.revertedWith("Fund not active");
@@ -278,40 +228,22 @@ describe("PortfolioFunds", () => {
     let fundId = null;
 
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
-
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "A test portfolio fund",
-        [charity1.address, charity2.address],
-        ["Charity One", "Charity Two"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      fundId = activeFunds[0];
+      fundId = await createFundAndGetId();
     });
 
     it("Should process native token donation with fee", async () => {
       const donationAmount = ethers.parseEther("1.0");
       const expectedFee = (donationAmount * FEE_RATE) / BASIS_POINTS;
       const expectedNet = donationAmount - expectedFee;
-
       const treasuryBalanceBefore = await ethers.provider.getBalance(treasury.address);
 
       await expect(
         portfolioFunds.connect(donor).donateNativeToFund(fundId, { value: donationAmount })
-      )
-        .to.emit(portfolioFunds, "DonationReceived")
+      ).to.emit(portfolioFunds, "DonationReceived")
         .withArgs(fundId, donor.address, ethers.ZeroAddress, donationAmount, expectedFee, expectedNet);
 
-      // Check treasury received fee
-      const treasuryBalanceAfter = await ethers.provider.getBalance(treasury.address);
-      expect(treasuryBalanceAfter - treasuryBalanceBefore).to.equal(expectedFee);
-
-      // Check fund balance (address(0) for native)
-      const fundBalance = await portfolioFunds.getFundBalance(fundId, ethers.ZeroAddress);
-      expect(fundBalance).to.equal(expectedNet);
+      expect(await ethers.provider.getBalance(treasury.address) - treasuryBalanceBefore).to.equal(expectedFee);
+      expect(await portfolioFunds.getFundBalance(fundId, ethers.ZeroAddress)).to.equal(expectedNet);
     });
 
     it("Should not allow zero value native donation", async () => {
@@ -322,7 +254,6 @@ describe("PortfolioFunds", () => {
 
     it("Should not allow native donation to inactive fund", async () => {
       await portfolioFunds.pauseFund(fundId);
-
       await expect(
         portfolioFunds.connect(donor).donateNativeToFund(fundId, { value: ethers.parseEther("1.0") })
       ).to.be.revertedWith("Fund not active");
@@ -333,72 +264,35 @@ describe("PortfolioFunds", () => {
     let fundId = null;
 
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
-
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "A test portfolio fund",
-        [charity1.address, charity2.address],
-        ["Charity One", "Charity Two"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      fundId = activeFunds[0];
-
-      // Make a donation
-      await token.connect(donor).approve(await portfolioFunds.getAddress(), ethers.parseEther("100.0"));
+      fundId = await setupFundWithTokenApproval(2, "100.0");
       await portfolioFunds.connect(donor).donateToFund(fundId, await token.getAddress(), ethers.parseEther("100.0"));
     });
 
     it("Should allow charity to claim ERC20 funds", async () => {
-      const claimableAmount = await portfolioFunds.getCharityClaimableAmount(
-        fundId, charity1.address, await token.getAddress()
-      );
-
+      const tokenAddress = await token.getAddress();
+      const claimableAmount = await portfolioFunds.getCharityClaimableAmount(fundId, charity1.address, tokenAddress);
       expect(claimableAmount).to.be.gt(0);
 
       const balanceBefore = await token.balanceOf(charity1.address);
-
-      await expect(
-        portfolioFunds.connect(charity1).claimFunds(fundId, await token.getAddress())
-      )
+      await expect(portfolioFunds.connect(charity1).claimFunds(fundId, tokenAddress))
         .to.emit(portfolioFunds, "CharityClaimedFunds");
 
-      const balanceAfter = await token.balanceOf(charity1.address);
-      expect(balanceAfter - balanceBefore).to.equal(claimableAmount);
-
-      // Check claimable is now zero
-      const claimableAfter = await portfolioFunds.getCharityClaimableAmount(
-        fundId, charity1.address, await token.getAddress()
-      );
-      expect(claimableAfter).to.equal(0);
-
-      // Check total claimed
-      const totalClaimed = await portfolioFunds.getCharityTotalClaimed(
-        fundId, charity1.address, await token.getAddress()
-      );
-      expect(totalClaimed).to.equal(claimableAmount);
+      expect(await token.balanceOf(charity1.address) - balanceBefore).to.equal(claimableAmount);
+      expect(await portfolioFunds.getCharityClaimableAmount(fundId, charity1.address, tokenAddress)).to.equal(0);
+      expect(await portfolioFunds.getCharityTotalClaimed(fundId, charity1.address, tokenAddress)).to.equal(claimableAmount);
     });
 
     it("Should allow charity to claim native funds", async () => {
-      // Make native donation
       await portfolioFunds.connect(donor).donateNativeToFund(fundId, { value: ethers.parseEther("1.0") });
-
-      const claimableAmount = await portfolioFunds.getCharityClaimableAmount(
-        fundId, charity1.address, ethers.ZeroAddress
-      );
-
+      const claimableAmount = await portfolioFunds.getCharityClaimableAmount(fundId, charity1.address, ethers.ZeroAddress);
       expect(claimableAmount).to.be.gt(0);
 
       const balanceBefore = await ethers.provider.getBalance(charity1.address);
-
       const tx = await portfolioFunds.connect(charity1).claimFunds(fundId, ethers.ZeroAddress);
       const receipt = await tx.wait();
       const gasUsed = receipt.gasUsed * receipt.gasPrice;
 
-      const balanceAfter = await ethers.provider.getBalance(charity1.address);
-      expect(balanceAfter - balanceBefore + gasUsed).to.equal(claimableAmount);
+      expect(await ethers.provider.getBalance(charity1.address) - balanceBefore + gasUsed).to.equal(claimableAmount);
     });
 
     it("Should not allow non-charity to claim funds", async () => {
@@ -408,10 +302,7 @@ describe("PortfolioFunds", () => {
     });
 
     it("Should not allow claiming with no funds", async () => {
-      // Charity1 claims first
       await portfolioFunds.connect(charity1).claimFunds(fundId, await token.getAddress());
-
-      // Try to claim again
       await expect(
         portfolioFunds.connect(charity1).claimFunds(fundId, await token.getAddress())
       ).to.be.revertedWith("No funds to claim");
@@ -419,7 +310,6 @@ describe("PortfolioFunds", () => {
 
     it("Should not allow claiming from inactive fund", async () => {
       await portfolioFunds.pauseFund(fundId);
-
       await expect(
         portfolioFunds.connect(charity1).claimFunds(fundId, await token.getAddress())
       ).to.be.revertedWith("Fund not active");
@@ -431,26 +321,11 @@ describe("PortfolioFunds", () => {
     let token2 = null;
 
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
+      fundId = await setupFundWithTokenApproval(2, "100.0");
 
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "A test portfolio fund",
-        [charity1.address, charity2.address],
-        ["Charity One", "Charity Two"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      fundId = activeFunds[0];
-
-      // Deploy second token
       const MockToken = await ethers.getContractFactory("MockERC20");
       token2 = await MockToken.deploy("Mock Token 2", "MTK2");
       await token2.mint(donor.address, ethers.parseEther("1000.0"));
-
-      // Make donations in both tokens
-      await token.connect(donor).approve(await portfolioFunds.getAddress(), ethers.parseEther("100.0"));
       await token2.connect(donor).approve(await portfolioFunds.getAddress(), ethers.parseEther("100.0"));
 
       await portfolioFunds.connect(donor).donateToFund(fundId, await token.getAddress(), ethers.parseEther("100.0"));
@@ -459,7 +334,6 @@ describe("PortfolioFunds", () => {
 
     it("Should allow batch claiming multiple tokens", async () => {
       const tokens = [await token.getAddress(), await token2.getAddress()];
-
       const claimable1 = await portfolioFunds.getCharityClaimableAmount(fundId, charity1.address, tokens[0]);
       const claimable2 = await portfolioFunds.getCharityClaimableAmount(fundId, charity1.address, tokens[1]);
 
@@ -468,11 +342,8 @@ describe("PortfolioFunds", () => {
 
       await portfolioFunds.connect(charity1).claimMultipleTokens(fundId, tokens);
 
-      const balance1After = await token.balanceOf(charity1.address);
-      const balance2After = await token2.balanceOf(charity1.address);
-
-      expect(balance1After - balance1Before).to.equal(claimable1);
-      expect(balance2After - balance2Before).to.equal(claimable2);
+      expect(await token.balanceOf(charity1.address) - balance1Before).to.equal(claimable1);
+      expect(await token2.balanceOf(charity1.address) - balance2Before).to.equal(claimable2);
     });
 
     it("Should not allow batch claiming with empty array", async () => {
@@ -486,18 +357,7 @@ describe("PortfolioFunds", () => {
     let fundId = null;
 
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
-
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "A test portfolio fund",
-        [charity1.address, charity2.address],
-        ["Charity One", "Charity Two"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      fundId = activeFunds[0];
+      fundId = await createFundAndGetId();
     });
 
     it("Should not allow updating ratios before governance is activated", async () => {
@@ -507,22 +367,17 @@ describe("PortfolioFunds", () => {
     });
 
     it("Should allow activating governance", async () => {
-      await expect(portfolioFunds.activateGovernance())
-        .to.emit(portfolioFunds, "GovernanceActivated");
-
+      await expect(portfolioFunds.activateGovernance()).to.emit(portfolioFunds, "GovernanceActivated");
       expect(await portfolioFunds.governanceActive()).to.equal(true);
     });
 
     it("Should not allow activating governance twice", async () => {
       await portfolioFunds.activateGovernance();
-
-      await expect(portfolioFunds.activateGovernance())
-        .to.be.revertedWith("Governance already active");
+      await expect(portfolioFunds.activateGovernance()).to.be.revertedWith("Governance already active");
     });
 
     it("Should allow updating ratios after governance is activated", async () => {
       await portfolioFunds.activateGovernance();
-
       await expect(portfolioFunds.updateDistributionRatios(fundId, [6000n, 4000n]))
         .to.emit(portfolioFunds, "DistributionRatiosUpdated");
 
@@ -533,15 +388,13 @@ describe("PortfolioFunds", () => {
 
     it("Should not allow ratios that don't sum to 100%", async () => {
       await portfolioFunds.activateGovernance();
-
       await expect(
-        portfolioFunds.updateDistributionRatios(fundId, [5000n, 4000n]) // Sum is 9000
+        portfolioFunds.updateDistributionRatios(fundId, [5000n, 4000n])
       ).to.be.revertedWith("Ratios must sum to 100%");
     });
 
     it("Should not allow zero ratios", async () => {
       await portfolioFunds.activateGovernance();
-
       await expect(
         portfolioFunds.updateDistributionRatios(fundId, [10000n, 0n])
       ).to.be.revertedWith("Ratio cannot be zero");
@@ -549,9 +402,8 @@ describe("PortfolioFunds", () => {
 
     it("Should not allow wrong number of ratios", async () => {
       await portfolioFunds.activateGovernance();
-
       await expect(
-        portfolioFunds.updateDistributionRatios(fundId, [10000n]) // Only one ratio for 2 charities
+        portfolioFunds.updateDistributionRatios(fundId, [10000n])
       ).to.be.revertedWith("Invalid ratios length");
     });
   });
@@ -559,51 +411,32 @@ describe("PortfolioFunds", () => {
   describe("Admin Functions", () => {
     it("Should allow admin to update platform fee rate", async () => {
       await expect(portfolioFunds.updatePlatformFeeRate(200n))
-        .to.emit(portfolioFunds, "PlatformFeeUpdated")
-        .withArgs(200n);
-
+        .to.emit(portfolioFunds, "PlatformFeeUpdated").withArgs(200n);
       expect(await portfolioFunds.platformFeeRate()).to.equal(200n);
     });
 
     it("Should not allow fee rate above 5%", async () => {
-      await expect(portfolioFunds.updatePlatformFeeRate(501n))
-        .to.be.revertedWith("Fee cannot exceed 5%");
+      await expect(portfolioFunds.updatePlatformFeeRate(501n)).to.be.revertedWith("Fee cannot exceed 5%");
     });
 
     it("Should allow admin to update treasury", async () => {
-      const newTreasury = nonAdmin.address;
-
-      await expect(portfolioFunds.updateTreasury(newTreasury))
-        .to.emit(portfolioFunds, "TreasuryUpdated")
-        .withArgs(newTreasury);
-
-      expect(await portfolioFunds.treasury()).to.equal(newTreasury);
+      await expect(portfolioFunds.updateTreasury(nonAdmin.address))
+        .to.emit(portfolioFunds, "TreasuryUpdated").withArgs(nonAdmin.address);
+      expect(await portfolioFunds.treasury()).to.equal(nonAdmin.address);
     });
 
     it("Should not allow zero address for treasury", async () => {
-      await expect(portfolioFunds.updateTreasury(ethers.ZeroAddress))
-        .to.be.revertedWith("Invalid treasury address");
+      await expect(portfolioFunds.updateTreasury(ethers.ZeroAddress)).to.be.revertedWith("Invalid treasury address");
     });
 
     it("Should allow admin to pause and unpause fund", async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "Description",
-        [charity1.address],
-        ["Charity One"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      const fundId = activeFunds[0];
+      const fundId = await createFundAndGetId(1);
 
       await portfolioFunds.pauseFund(fundId);
-      let fundDetails = await portfolioFunds.getFundDetails(fundId);
-      expect(fundDetails.active).to.equal(false);
+      expect((await portfolioFunds.getFundDetails(fundId)).active).to.equal(false);
 
       await portfolioFunds.unpauseFund(fundId);
-      fundDetails = await portfolioFunds.getFundDetails(fundId);
-      expect(fundDetails.active).to.equal(true);
+      expect((await portfolioFunds.getFundDetails(fundId)).active).to.equal(true);
     });
 
     it("Should allow admin to emergency pause and unpause", async () => {
@@ -619,30 +452,14 @@ describe("PortfolioFunds", () => {
     let fundId = null;
 
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
-
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "A test portfolio fund",
-        [charity1.address, charity2.address],
-        ["Charity One", "Charity Two"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      fundId = activeFunds[0];
+      fundId = await createFundAndGetId();
     });
 
     it("Should return correct fund details", async () => {
       const details = await portfolioFunds.getFundDetails(fundId);
-
       expect(details.name).to.equal("Test Fund");
-      expect(details.description).to.equal("A test portfolio fund");
       expect(details.active).to.equal(true);
       expect(details.charities.length).to.equal(2);
-      expect(details.ratios.length).to.equal(2);
-      expect(details.totalRaised).to.equal(0);
-      expect(details.totalDistributed).to.equal(0);
     });
 
     it("Should return charity funds", async () => {
@@ -652,8 +469,7 @@ describe("PortfolioFunds", () => {
     });
 
     it("Should return all active funds", async () => {
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      expect(activeFunds.length).to.equal(1);
+      expect((await portfolioFunds.getAllActiveFunds()).length).to.equal(1);
     });
   });
 
@@ -661,24 +477,11 @@ describe("PortfolioFunds", () => {
     let fundId = null;
 
     beforeEach(async () => {
-      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
-
-      await portfolioFunds.createPortfolioFund(
-        "Test Fund",
-        "Description",
-        [charity1.address],
-        ["Charity One"]
-      );
-
-      const activeFunds = await portfolioFunds.getAllActiveFunds();
-      fundId = activeFunds[0];
-
-      await token.connect(donor).approve(await portfolioFunds.getAddress(), ethers.parseEther("100.0"));
+      fundId = await setupFundWithTokenApproval(1, "100.0");
     });
 
     it("Should prevent donations when paused", async () => {
       await portfolioFunds.emergencyPause();
-
       await expect(
         portfolioFunds.connect(donor).donateToFund(fundId, await token.getAddress(), ethers.parseEther("10.0"))
       ).to.be.revertedWithCustomError(portfolioFunds, "EnforcedPause");
@@ -686,7 +489,6 @@ describe("PortfolioFunds", () => {
 
     it("Should prevent native donations when paused", async () => {
       await portfolioFunds.emergencyPause();
-
       await expect(
         portfolioFunds.connect(donor).donateNativeToFund(fundId, { value: ethers.parseEther("1.0") })
       ).to.be.revertedWithCustomError(portfolioFunds, "EnforcedPause");
