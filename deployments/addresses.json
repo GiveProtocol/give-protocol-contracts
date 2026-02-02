@@ -1,0 +1,40 @@
+{
+  "baseSepolia": {
+    "network": "baseSepolia",
+    "chainId": 84532,
+    "contracts": {}
+  },
+  "base": {
+    "network": "base",
+    "chainId": 8453,
+    "contracts": {}
+  },
+  "optimismSepolia": {
+    "network": "optimismSepolia",
+    "chainId": 11155420,
+    "contracts": {}
+  },
+  "optimism": {
+    "network": "optimism",
+    "chainId": 10,
+    "contracts": {}
+  },
+  "moonbase": {
+    "network": "moonbase",
+    "chainId": 1287,
+    "deployer": "0x8cFc24Ad1CDc3B80338392f17f6e6ab40552e1C0",
+    "timestamp": "2025-11-25T04:53:10.788Z",
+    "contracts": {
+      "MockERC20": "0x0A21b2D5c9A20cC9EDE60C3257d6f40B7CD7eC40",
+      "DurationDonation": "0xFbcB6a8aFd5ec1CEC27065CB565C3dd8578E921F",
+      "VolunteerVerification": "0xEEE43F7c205e93F1eD665d656C3Eb74a977be5d0",
+      "CharityScheduledDistribution": "0xeD6E35A0fa75d4330b7c6Fc02A2EE61AA25386F0",
+      "DistributionExecutor": "0x3C1d1f67Bb190119d0727fafA59977cAA424A4AB"
+    }
+  },
+  "moonbeam": {
+    "network": "moonbeam",
+    "chainId": 1284,
+    "contracts": {}
+  }
+}

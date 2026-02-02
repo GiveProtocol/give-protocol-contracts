@@ -15,27 +15,55 @@ const config = {
     }
   },
   networks: {
+    // ========== LOCAL ==========
     hardhat: {
-      chainId: 1287, // Match Moonbase Alpha for local testing
+      chainId: 31337,
       mining: {
         auto: true,
         interval: 5000
       }
     },
+
+    // ========== BASE ==========
+    baseSepolia: {
+      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
+      chainId: 84532,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: 1000000000
+    },
+    base: {
+      url: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+      chainId: 8453,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    },
+
+    // ========== OPTIMISM ==========
+    optimismSepolia: {
+      url: process.env.OPTIMISM_SEPOLIA_RPC_URL || "https://sepolia.optimism.io",
+      chainId: 11155420,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    },
+    optimism: {
+      url: process.env.OPTIMISM_RPC_URL || "https://mainnet.optimism.io",
+      chainId: 10,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    },
+
+    // ========== MOONBEAM ==========
     moonbase: {
-      url: process.env.MOONBEAM_API_KEY 
+      url: process.env.MOONBEAM_API_KEY
         ? `https://moonbase-alpha.api.onfinality.io/public/${process.env.MOONBEAM_API_KEY}`
         : "https://rpc.api.moonbase.moonbeam.network",
-      chainId: 1287, // Moonbase Alpha TestNet
+      chainId: 1287,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       gas: 5000000,
       gasPrice: 1000000000
     },
     moonbeam: {
-      url: process.env.MOONBEAM_API_KEY 
+      url: process.env.MOONBEAM_API_KEY
         ? `https://moonbeam.api.onfinality.io/public/${process.env.MOONBEAM_API_KEY}`
         : "https://rpc.api.moonbeam.network",
-      chainId: 1284, // Moonbeam Mainnet
+      chainId: 1284,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
     }
   },
@@ -47,10 +75,49 @@ const config = {
   },
   etherscan: {
     apiKey: {
+      // Base
+      baseSepolia: process.env.BASESCAN_API_KEY || "",
+      base: process.env.BASESCAN_API_KEY || "",
+      // Optimism
+      optimismSepolia: process.env.OPTIMISM_ETHERSCAN_API_KEY || "",
+      optimism: process.env.OPTIMISM_ETHERSCAN_API_KEY || "",
+      // Moonbeam
       moonbaseAlpha: process.env.MOONSCAN_API_KEY || "",
       moonbeam: process.env.MOONSCAN_API_KEY || ""
     },
     customChains: [
+      {
+        network: "baseSepolia",
+        chainId: 84532,
+        urls: {
+          apiURL: "https://api-sepolia.basescan.org/api",
+          browserURL: "https://sepolia.basescan.org"
+        }
+      },
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://api.basescan.org/api",
+          browserURL: "https://basescan.org"
+        }
+      },
+      {
+        network: "optimismSepolia",
+        chainId: 11155420,
+        urls: {
+          apiURL: "https://api-sepolia-optimistic.etherscan.io/api",
+          browserURL: "https://sepolia-optimistic.etherscan.io"
+        }
+      },
+      {
+        network: "optimism",
+        chainId: 10,
+        urls: {
+          apiURL: "https://api-optimistic.etherscan.io/api",
+          browserURL: "https://optimistic.etherscan.io"
+        }
+      },
       {
         network: "moonbaseAlpha",
         chainId: 1287,
