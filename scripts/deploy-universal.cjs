@@ -275,9 +275,7 @@ async function main() {
   }
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error("\n[ERROR]", error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error("\n[ERROR]", error);
+  process.exitCode = 1;
+});
