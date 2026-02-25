@@ -87,7 +87,6 @@ describe("TimelockUpgrade", () => {
   describe("Timelock-governed upgrade", () => {
     it("Should execute upgrade through timelock after delay", async () => {
       const proxyAddr = await donation.getAddress();
-      const timelockAddr = await timelock.getAddress();
 
       // Register a charity to verify state preservation
       const charityAddr = ethers.Wallet.createRandom().address;
