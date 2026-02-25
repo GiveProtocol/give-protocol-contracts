@@ -1,0 +1,141 @@
+const { expect } = require("chai");
+const hre = require("hardhat");
+const { ethers } = hre;
+const { time } = require("@nomicfoundation/hardhat-network-helpers");
+
+describe("TimelockUpgrade", () => {
+  let donation = null;
+  let timelock = null;
+  let owner = null;
+  let treasury = null;
+  let proposer = null;
+  let executor = null;
+
+  const MIN_DELAY = 3600; // 1 hour for testing (shorter than prod)
+
+  beforeEach(async () => {
+    [owner, treasury, proposer, executor] = await ethers.getSigners();
+
+    // Deploy TimelockController
+    const TimelockController = await ethers.getContractFactory("TimelockController");
+    timelock = await TimelockController.deploy(
+      MIN_DELAY,
+      [proposer.address], // proposers
+      [executor.address], // executors
+      ethers.ZeroAddress,  // admin = address(0) → self-governing
+    );
+    await timelock.waitForDeployment();
+
+    // Deploy DurationDonation proxy with timelock as owner
+    const DurationDonation = await ethers.getContractFactory("DurationDonation");
+    donation = await hre.upgrades.deployProxy(
+      DurationDonation,
+      [treasury.address, await timelock.getAddress()],
+      { initializer: "initialize", kind: "uups" },
+    );
+    await donation.waitForDeployment();
+  });
+
+  describe("Timelock-governed ownership", () => {
+    it("Should set timelock as contract owner", async () => {
+      expect(await donation.owner()).to.equal(await timelock.getAddress());
+    });
+
+    it("Should reject direct calls to owner-only functions", async () => {
+      await expect(
+        donation.connect(owner).registerCharity(owner.address),
+      ).to.be.revertedWithCustomError(donation, "OwnableUnauthorizedAccount");
+    });
+
+    it("Should execute owner-only calls through timelock after delay", async () => {
+      const charityAddr = ethers.Wallet.createRandom().address;
+      const donationAddr = await donation.getAddress();
+      const timelockAddr = await timelock.getAddress();
+
+      // Encode the call
+      const callData = donation.interface.encodeFunctionData("registerCharity", [charityAddr]);
+
+      // Schedule through timelock
+      const predecessor = ethers.ZeroHash;
+      const salt = ethers.id("register-charity-1");
+
+      await timelock.connect(proposer).schedule(
+        donationAddr,
+        0, // value
+        callData,
+        predecessor,
+        salt,
+        MIN_DELAY,
+      );
+
+      // Should fail before delay
+      await expect(
+        timelock.connect(executor).execute(donationAddr, 0, callData, predecessor, salt),
+      ).to.be.reverted;
+
+      // Advance time past delay
+      await time.increase(MIN_DELAY + 1);
+
+      // Execute
+      await timelock.connect(executor).execute(donationAddr, 0, callData, predecessor, salt);
+
+      // Verify charity was registered
+      const info = await donation.getCharityInfo(charityAddr);
+      expect(info.isRegistered).to.equal(true);
+    });
+  });
+
+  describe("Timelock-governed upgrade", () => {
+    it("Should execute upgrade through timelock after delay", async () => {
+      const proxyAddr = await donation.getAddress();
+      const timelockAddr = await timelock.getAddress();
+
+      // Register a charity to verify state preservation
+      const charityAddr = ethers.Wallet.createRandom().address;
+      const registerData = donation.interface.encodeFunctionData("registerCharity", [charityAddr]);
+      const regSalt = ethers.id("register-pre-upgrade");
+
+      await timelock.connect(proposer).schedule(proxyAddr, 0, registerData, ethers.ZeroHash, regSalt, MIN_DELAY);
+      await time.increase(MIN_DELAY + 1);
+      await timelock.connect(executor).execute(proxyAddr, 0, registerData, ethers.ZeroHash, regSalt);
+
+      // Deploy new implementation
+      const V2 = await ethers.getContractFactory("DurationDonation");
+      const v2Impl = await V2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      // Encode upgradeToAndCall
+      const upgradeData = donation.interface.encodeFunctionData("upgradeToAndCall", [v2Addr, "0x"]);
+      const upgradeSalt = ethers.id("upgrade-v2");
+
+      // Schedule upgrade
+      await timelock.connect(proposer).schedule(proxyAddr, 0, upgradeData, ethers.ZeroHash, upgradeSalt, MIN_DELAY);
+
+      // Should fail before delay
+      await expect(
+        timelock.connect(executor).execute(proxyAddr, 0, upgradeData, ethers.ZeroHash, upgradeSalt),
+      ).to.be.reverted;
+
+      // Advance time
+      await time.increase(MIN_DELAY + 1);
+
+      // Execute upgrade
+      await timelock.connect(executor).execute(proxyAddr, 0, upgradeData, ethers.ZeroHash, upgradeSalt);
+
+      // Verify state preserved after upgrade
+      const info = await donation.getCharityInfo(charityAddr);
+      expect(info.isRegistered).to.equal(true);
+
+      // Verify proxy address unchanged
+      expect(await donation.getAddress()).to.equal(proxyAddr);
+    });
+
+    it("Should reject upgrade without timelock", async () => {
+      const V2 = await ethers.getContractFactory("DurationDonation", owner);
+      await expect(
+        hre.upgrades.upgradeProxy(await donation.getAddress(), V2, { kind: "uups" }),
+      ).to.be.revertedWithCustomError(donation, "OwnableUnauthorizedAccount");
+    });
+  });
+});

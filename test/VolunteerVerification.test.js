@@ -4,19 +4,25 @@ const { ethers } = hre;
 
 describe("VolunteerVerification", () => {
   let verification = null;
-  let _owner = null;
+  let owner = null;
   let charity = null;
   let applicant = null;
   let volunteer = null;
+  let nonOwner = null;
 
   beforeEach(async () => {
-    [_owner, charity, applicant, volunteer] = await ethers.getSigners();
+    [owner, charity, applicant, volunteer, nonOwner] = await ethers.getSigners();
 
-    // Deploy verification contract
+    // Deploy verification contract via proxy
     const VolunteerVerification = await ethers.getContractFactory(
       "VolunteerVerification",
     );
-    verification = await VolunteerVerification.deploy();
+    verification = await hre.upgrades.deployProxy(
+      VolunteerVerification,
+      [owner.address],
+      { initializer: "initialize", kind: "uups" },
+    );
+    await verification.waitForDeployment();
   });
 
   describe("Charity Registration", () => {
@@ -207,6 +213,71 @@ describe("VolunteerVerification", () => {
           .connect(charity)
           .verifyApplication(applicationHash, applicant.address),
       ).to.emit(verification, "ApplicationVerified");
+    });
+  });
+
+  describe("Upgradeability", () => {
+    it("Should not allow initialize to be called twice", async () => {
+      await expect(
+        verification.initialize(owner.address),
+      ).to.be.revertedWithCustomError(verification, "InvalidInitialization");
+    });
+
+    it("Should allow owner to upgrade", async () => {
+      const V2 = await ethers.getContractFactory("VolunteerVerification");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await verification.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+      expect(await upgraded.getAddress()).to.equal(
+        await verification.getAddress(),
+      );
+    });
+
+    it("Should reject unauthorized upgrade", async () => {
+      const V2 = await ethers.getContractFactory(
+        "VolunteerVerification",
+        nonOwner,
+      );
+      await expect(
+        hre.upgrades.upgradeProxy(await verification.getAddress(), V2, {
+          kind: "uups",
+        }),
+      ).to.be.revertedWithCustomError(
+        verification,
+        "OwnableUnauthorizedAccount",
+      );
+    });
+
+    it("Should preserve state across upgrade", async () => {
+      // Write state
+      await verification.registerCharity(charity.address);
+
+      const charityInfoBefore = await verification.charities(charity.address);
+      expect(charityInfoBefore.isRegistered).to.equal(true);
+
+      // Upgrade
+      const V2 = await ethers.getContractFactory("VolunteerVerification");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await verification.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+
+      // Verify state preserved
+      const charityInfoAfter = await upgraded.charities(charity.address);
+      expect(charityInfoAfter.isRegistered).to.equal(true);
+      expect(charityInfoAfter.isActive).to.equal(true);
+    });
+
+    it("Should keep same proxy address after upgrade", async () => {
+      const proxyAddr = await verification.getAddress();
+      const V2 = await ethers.getContractFactory("VolunteerVerification");
+      const upgraded = await hre.upgrades.upgradeProxy(proxyAddr, V2, {
+        kind: "uups",
+      });
+      expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
   });
 });

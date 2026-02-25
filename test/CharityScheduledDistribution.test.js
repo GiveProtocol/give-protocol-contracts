@@ -6,10 +6,11 @@ describe("CharityScheduledDistribution", () => {
   let distribution = null;
   let executor = null;
   let token = null;
-  let _owner = null;
+  let owner = null;
   let charity = null;
   let donor = null;
   let treasury = null;
+  let nonOwner = null;
 
   const TOKEN_PRICE = BigInt(100 * 10 ** 8); // $100 USD with 8 decimals
   const TOTAL_AMOUNT = ethers.parseEther("12.0"); // 12 tokens
@@ -21,20 +22,25 @@ describe("CharityScheduledDistribution", () => {
   const NET_MONTHLY_AMOUNT = MONTHLY_AMOUNT - (MONTHLY_AMOUNT * FEE_RATE) / BASIS_POINTS;
 
   beforeEach(async () => {
-    [_owner, charity, donor, treasury] = await ethers.getSigners();
+    [owner, charity, donor, treasury, nonOwner] = await ethers.getSigners();
 
     // Deploy mock ERC20 token
     const MockToken = await ethers.getContractFactory("MockERC20");
     token = await MockToken.deploy("Mock Token", "MTK");
     await token.mint(donor.address, ethers.parseEther("100.0"));
 
-    // Deploy distribution contract with treasury
+    // Deploy distribution contract via proxy
     const CharityScheduledDistribution = await ethers.getContractFactory(
       "CharityScheduledDistribution",
     );
-    distribution = await CharityScheduledDistribution.deploy(treasury.address);
+    distribution = await hre.upgrades.deployProxy(
+      CharityScheduledDistribution,
+      [treasury.address, owner.address],
+      { initializer: "initialize", kind: "uups" },
+    );
+    await distribution.waitForDeployment();
 
-    // Deploy executor contract
+    // Deploy executor contract (not upgraded — takes proxy address)
     const DistributionExecutor = await ethers.getContractFactory(
       "DistributionExecutor",
     );
@@ -354,6 +360,69 @@ describe("CharityScheduledDistribution", () => {
         .withArgs(treasury.address, newTreasury);
 
       expect(await distribution.treasury()).to.equal(newTreasury);
+    });
+  });
+
+  describe("Upgradeability", () => {
+    it("Should not allow initialize to be called twice", async () => {
+      await expect(
+        distribution.initialize(treasury.address, owner.address),
+      ).to.be.revertedWithCustomError(distribution, "InvalidInitialization");
+    });
+
+    it("Should allow owner to upgrade", async () => {
+      const V2 = await ethers.getContractFactory("CharityScheduledDistribution");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await distribution.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+      expect(await upgraded.getAddress()).to.equal(
+        await distribution.getAddress(),
+      );
+    });
+
+    it("Should reject unauthorized upgrade", async () => {
+      const V2 = await ethers.getContractFactory(
+        "CharityScheduledDistribution",
+        nonOwner,
+      );
+      await expect(
+        hre.upgrades.upgradeProxy(await distribution.getAddress(), V2, {
+          kind: "uups",
+        }),
+      ).to.be.revertedWithCustomError(
+        distribution,
+        "OwnableUnauthorizedAccount",
+      );
+    });
+
+    it("Should preserve state across upgrade", async () => {
+      // Write state
+      const newCharity = ethers.Wallet.createRandom().address;
+      await distribution.addCharity(newCharity);
+
+      // Upgrade
+      const V2 = await ethers.getContractFactory("CharityScheduledDistribution");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await distribution.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+
+      // Verify state preserved
+      expect(await upgraded.verifiedCharities(newCharity)).to.equal(true);
+      expect(await upgraded.treasury()).to.equal(treasury.address);
+      expect(await upgraded.platformFeeRate()).to.equal(FEE_RATE);
+    });
+
+    it("Should keep same proxy address after upgrade", async () => {
+      const proxyAddr = await distribution.getAddress();
+      const V2 = await ethers.getContractFactory("CharityScheduledDistribution");
+      const upgraded = await hre.upgrades.upgradeProxy(proxyAddr, V2, {
+        kind: "uups",
+      });
+      expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
   });
 });

@@ -1,19 +1,40 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title CharityScheduledDistribution
  * @dev Allows donors to schedule token distributions to charities on a monthly basis
+ *
+ * Storage Layout (contract state variables, sequential from slot 0):
+ * | Slot  | Variable            | Type                                      |
+ * |-------|---------------------|-------------------------------------------|
+ * | 0     | donationSchedules   | mapping(uint256 => DonationSchedule)       |
+ * | 1     | nextScheduleId      | uint256                                    |
+ * | 2     | tokenPrices         | mapping(address => uint256)                |
+ * | 3     | verifiedCharities   | mapping(address => bool)                   |
+ * | 4     | treasury            | address                                    |
+ * | 5     | platformFeeRate     | uint256                                    |
+ * | 6-55  | __gap               | uint256[50]                                |
+ *
+ * Constants (bytecode, no storage slot):
+ * - MAX_FEE_RATE = 500
+ * - BASIS_POINTS = 10000
+ * - DISTRIBUTION_INTERVAL = 30 days
+ * - MIN_DONATION_USD = 10 * 10**8
+ * - MAX_MONTHS = 60
+ * - MIN_MONTHS = 1
  */
-contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
+contract CharityScheduledDistribution is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
-    
+
     // Struct to track donation schedules
     struct DonationSchedule {
         address donor;
@@ -25,22 +46,22 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         uint256 nextDistributionTimestamp;
         bool active;
     }
-    
+
     // Mapping of scheduleId to DonationSchedule
     mapping(uint256 => DonationSchedule) public donationSchedules;
-    
+
     // Counter for schedule IDs
     uint256 public nextScheduleId;
-    
+
     // Mapping for token prices (simplified version without Chainlink)
     mapping(address => uint256) public tokenPrices;
-    
+
     // Verified charities
     mapping(address => bool) public verifiedCharities;
 
-    // Platform fee settings
+    // Platform fee settings — initialized in initialize()
     address public treasury;
-    uint256 public platformFeeRate = 100; // 1% in basis points (100/10000 = 1%)
+    uint256 public platformFeeRate;
     uint256 public constant MAX_FEE_RATE = 500; // Cap at 5%
     uint256 public constant BASIS_POINTS = 10000;
 
@@ -55,41 +76,56 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
 
     // Minimum number of months allowed
     uint256 public constant MIN_MONTHS = 1;
-    
+
+    // Storage gap for future upgrades
+    uint256[50] private __gap;
+
     // Events
     event CharityAdded(address indexed charity);
     event CharityRemoved(address indexed charity);
     event TokenPriceSet(address indexed token, uint256 price);
     event ScheduleCreated(
-        uint256 indexed scheduleId, 
-        address indexed donor, 
-        address indexed charity, 
+        uint256 indexed scheduleId,
+        address indexed donor,
+        address indexed charity,
         address token,
-        uint256 totalAmount, 
-        uint256 amountPerMonth, 
+        uint256 totalAmount,
+        uint256 amountPerMonth,
         uint256 months
     );
     event DistributionExecuted(
-        uint256 indexed scheduleId, 
-        address indexed charity, 
+        uint256 indexed scheduleId,
+        address indexed charity,
         address token,
-        uint256 amount, 
+        uint256 amount,
         uint256 monthsRemaining
     );
     event ScheduleCancelled(uint256 indexed scheduleId);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     event PlatformFeeRateUpdated(uint256 oldRate, uint256 newRate);
     event PlatformFeeCollected(uint256 indexed scheduleId, address token, uint256 feeAmount);
-    
-    /**
-     * @dev Constructor
-     * @param _treasury Address of the platform treasury for fee collection
-     */
-    constructor(address _treasury) Ownable(msg.sender) {
-        require(_treasury != address(0), "Invalid treasury address");
-        treasury = _treasury;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
-    
+
+    /**
+     * @dev Initialize the contract
+     * @param _treasury Address of the platform treasury for fee collection
+     * @param initialOwner Address of the contract owner
+     */
+    function initialize(address _treasury, address initialOwner) public initializer {
+        require(_treasury != address(0), "Invalid treasury address");
+        require(initialOwner != address(0), "Invalid owner address");
+        __Ownable_init(initialOwner);
+        __ReentrancyGuard_init();
+        __Pausable_init();
+        __UUPSUpgradeable_init();
+        treasury = _treasury;
+        platformFeeRate = 100;
+    }
+
     /**
      * @dev Add a verified charity
      * @param charity The charity address to add
@@ -99,7 +135,7 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         verifiedCharities[charity] = true;
         emit CharityAdded(charity);
     }
-    
+
     /**
      * @dev Remove a verified charity
      * @param charity The charity address to remove
@@ -108,7 +144,7 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         verifiedCharities[charity] = false;
         emit CharityRemoved(charity);
     }
-    
+
     /**
      * @dev Set price for a token (simplified version without Chainlink)
      * @param token The token address
@@ -120,7 +156,7 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         tokenPrices[token] = price;
         emit TokenPriceSet(token, price);
     }
-    
+
     /**
      * @dev Get token price in USD
      * @param token The token address
@@ -131,7 +167,7 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         require(price > 0, "Price not set");
         return price;
     }
-    
+
     /**
      * @dev Create a new monthly distribution schedule
      * @param charity The charity address
@@ -153,8 +189,6 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
         require(tokenPriceUSD > 0, "Token price must be > 0");
 
         // Calculate total donation value in USD (with 8 decimals)
-        // totalAmount is in token's smallest unit (e.g., wei for 18 decimal tokens)
-        // We need to adjust for token decimals. Assuming 18 decimals for most ERC20 tokens
         uint256 totalValueUSD = (totalAmount * tokenPriceUSD) / 1e18;
 
         // Verify minimum donation amount ($10 USD)
@@ -190,7 +224,7 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
             numberOfMonths
         );
     }
-    
+
     /**
      * @dev Execute distributions that are due
      * @param scheduleIds Array of schedule IDs to process
@@ -237,30 +271,30 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
             }
         }
     }
-    
+
     /**
      * @dev Cancel a schedule (only by donor)
      * @param scheduleId The schedule ID to cancel
      */
     function cancelSchedule(uint256 scheduleId) external nonReentrant whenNotPaused {
         DonationSchedule storage schedule = donationSchedules[scheduleId];
-        
+
         require(schedule.donor == msg.sender, "Not the donor");
         require(schedule.active, "Schedule not active");
-        
+
         // Calculate remaining amount
         uint256 remainingAmount = schedule.amountPerMonth * schedule.monthsRemaining;
-        
+
         // Mark schedule as inactive BEFORE external call (check-effects-interactions pattern)
         schedule.active = false;
         schedule.monthsRemaining = 0;
-        
+
         // Transfer remaining tokens back to donor
         IERC20(schedule.token).safeTransfer(schedule.donor, remainingAmount);
-        
+
         emit ScheduleCancelled(scheduleId);
     }
-    
+
     /**
      * @dev Get all active schedules for a donor
      * @param donor The donor address
@@ -327,4 +361,9 @@ contract CharityScheduledDistribution is Ownable, ReentrancyGuard, Pausable {
     function unpause() external onlyOwner {
         _unpause();
     }
+
+    /**
+     * @dev Authorize contract upgrade — only owner can upgrade
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

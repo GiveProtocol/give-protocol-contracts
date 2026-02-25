@@ -5,7 +5,7 @@ const { ethers } = hre;
 describe("DurationDonation", () => {
   let donation = null;
   let token = null;
-  let _owner = null;
+  let owner = null;
   let charity = null;
   let donor = null;
   let treasury = null;
@@ -16,16 +16,21 @@ describe("DurationDonation", () => {
   const MINIMUM_DONATION = ethers.parseEther("0.001");
 
   beforeEach(async () => {
-    [_owner, charity, donor, treasury, nonOwner] = await ethers.getSigners();
+    [owner, charity, donor, treasury, nonOwner] = await ethers.getSigners();
 
     // Deploy mock ERC20 token
     const MockToken = await ethers.getContractFactory("MockERC20");
     token = await MockToken.deploy("Mock Token", "MTK");
     await token.mint(donor.address, ethers.parseEther("1000.0"));
 
-    // Deploy donation contract with treasury
+    // Deploy donation contract via proxy
     const DurationDonation = await ethers.getContractFactory("DurationDonation");
-    donation = await DurationDonation.deploy(treasury.address);
+    donation = await hre.upgrades.deployProxy(
+      DurationDonation,
+      [treasury.address, owner.address],
+      { initializer: "initialize", kind: "uups" },
+    );
+    await donation.waitForDeployment();
 
     // Register charity
     await donation.registerCharity(charity.address);
@@ -43,7 +48,11 @@ describe("DurationDonation", () => {
     it("Should revert with zero treasury address", async () => {
       const DurationDonation = await ethers.getContractFactory("DurationDonation");
       await expect(
-        DurationDonation.deploy(ethers.ZeroAddress)
+        hre.upgrades.deployProxy(
+          DurationDonation,
+          [ethers.ZeroAddress, owner.address],
+          { initializer: "initialize", kind: "uups" },
+        ),
       ).to.be.revertedWith("Invalid treasury address");
     });
   });
@@ -597,6 +606,77 @@ describe("DurationDonation", () => {
     it("Should return correct donation amount", async () => {
       const donationAmount = await donation.getDonationAmount(donor.address, charity.address);
       expect(donationAmount).to.equal(0);
+    });
+  });
+
+  describe("Upgradeability", () => {
+    it("Should not allow initialize to be called twice", async () => {
+      await expect(
+        donation.initialize(treasury.address, owner.address),
+      ).to.be.revertedWithCustomError(donation, "InvalidInitialization");
+    });
+
+    it("Should allow owner to upgrade", async () => {
+      const V2 = await ethers.getContractFactory("DurationDonation");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await donation.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+      expect(await upgraded.getAddress()).to.equal(
+        await donation.getAddress(),
+      );
+    });
+
+    it("Should reject unauthorized upgrade", async () => {
+      const V2 = await ethers.getContractFactory(
+        "DurationDonation",
+        nonOwner,
+      );
+      await expect(
+        hre.upgrades.upgradeProxy(await donation.getAddress(), V2, {
+          kind: "uups",
+        }),
+      ).to.be.revertedWithCustomError(
+        donation,
+        "OwnableUnauthorizedAccount",
+      );
+    });
+
+    it("Should preserve state across upgrade", async () => {
+      // Verify initial state
+      const charityInfoBefore = await donation.getCharityInfo(charity.address);
+      expect(charityInfoBefore.isRegistered).to.equal(true);
+
+      // Upgrade
+      const V2 = await ethers.getContractFactory("DurationDonation");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await donation.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+
+      // Verify state preserved
+      const charityInfoAfter = await upgraded.getCharityInfo(charity.address);
+      expect(charityInfoAfter.isRegistered).to.equal(true);
+      expect(charityInfoAfter.isActive).to.equal(true);
+
+      // Verify treasury preserved
+      expect(await upgraded.giveProtocolTreasury()).to.equal(treasury.address);
+
+      // Verify tip rates preserved
+      const rates = await upgraded.getSuggestedTipRates();
+      expect(rates.length).to.equal(3);
+      expect(rates[0]).to.equal(500n);
+    });
+
+    it("Should keep same proxy address after upgrade", async () => {
+      const proxyAddr = await donation.getAddress();
+      const V2 = await ethers.getContractFactory("DurationDonation");
+      const upgraded = await hre.upgrades.upgradeProxy(proxyAddr, V2, {
+        kind: "uups",
+      });
+      expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
   });
 });

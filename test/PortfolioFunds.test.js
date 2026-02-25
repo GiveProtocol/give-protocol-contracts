@@ -49,7 +49,12 @@ describe("PortfolioFunds", () => {
     await token.mint(donor.address, ethers.parseEther("1000.0"));
 
     const PortfolioFunds = await ethers.getContractFactory("PortfolioFunds");
-    portfolioFunds = await PortfolioFunds.deploy(treasury.address);
+    portfolioFunds = await hre.upgrades.deployProxy(
+      PortfolioFunds,
+      [treasury.address, owner.address],
+      { initializer: "initialize", kind: "uups" },
+    );
+    await portfolioFunds.waitForDeployment();
   });
 
   describe("Deployment", () => {
@@ -68,7 +73,13 @@ describe("PortfolioFunds", () => {
 
     it("Should revert with zero treasury address", async () => {
       const PortfolioFunds = await ethers.getContractFactory("PortfolioFunds");
-      await expect(PortfolioFunds.deploy(ethers.ZeroAddress)).to.be.revertedWith("Invalid treasury address");
+      await expect(
+        hre.upgrades.deployProxy(
+          PortfolioFunds,
+          [ethers.ZeroAddress, owner.address],
+          { initializer: "initialize", kind: "uups" },
+        ),
+      ).to.be.revertedWith("Invalid treasury address");
     });
   });
 
@@ -492,6 +503,65 @@ describe("PortfolioFunds", () => {
       await expect(
         portfolioFunds.connect(donor).donateNativeToFund(fundId, { value: ethers.parseEther("1.0") })
       ).to.be.revertedWithCustomError(portfolioFunds, "EnforcedPause");
+    });
+  });
+
+  describe("Upgradeability", () => {
+    it("Should not allow initialize to be called twice", async () => {
+      await expect(
+        portfolioFunds.initialize(treasury.address, owner.address),
+      ).to.be.revertedWithCustomError(portfolioFunds, "InvalidInitialization");
+    });
+
+    it("Should allow admin to upgrade", async () => {
+      const V2 = await ethers.getContractFactory("PortfolioFunds");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await portfolioFunds.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+      expect(await upgraded.getAddress()).to.equal(
+        await portfolioFunds.getAddress(),
+      );
+    });
+
+    it("Should reject unauthorized upgrade", async () => {
+      const V2 = await ethers.getContractFactory(
+        "PortfolioFunds",
+        nonAdmin,
+      );
+      await expect(
+        hre.upgrades.upgradeProxy(await portfolioFunds.getAddress(), V2, {
+          kind: "uups",
+        }),
+      ).to.be.reverted;
+    });
+
+    it("Should preserve state across upgrade", async () => {
+      // Write state
+      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
+
+      // Upgrade
+      const V2 = await ethers.getContractFactory("PortfolioFunds");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await portfolioFunds.getAddress(),
+        V2,
+        { kind: "uups" },
+      );
+
+      // Verify state preserved
+      expect(await upgraded.verifiedCharities(charity1.address)).to.equal(true);
+      expect(await upgraded.treasury()).to.equal(treasury.address);
+      expect(await upgraded.platformFeeRate()).to.equal(FEE_RATE);
+    });
+
+    it("Should keep same proxy address after upgrade", async () => {
+      const proxyAddr = await portfolioFunds.getAddress();
+      const V2 = await ethers.getContractFactory("PortfolioFunds");
+      const upgraded = await hre.upgrades.upgradeProxy(proxyAddr, V2, {
+        kind: "uups",
+      });
+      expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
   });
 });

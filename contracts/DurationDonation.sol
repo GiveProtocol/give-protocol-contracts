@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity 0.8.22;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -11,8 +13,24 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
  * @title DurationDonation
  * @dev Enhanced donation contract with integrated platform tip functionality
  * All donations (including platform tips) are tax-deductible
+ *
+ * Storage Layout (contract state variables, sequential from slot 0):
+ * | Slot  | Variable               | Type                                          |
+ * |-------|------------------------|-----------------------------------------------|
+ * | 0     | giveProtocolTreasury   | address                                       |
+ * | 1     | charities              | mapping(address => Charity)                    |
+ * | 2     | donations              | mapping(address => mapping(address => uint256))|
+ * | 3     | taxReceipts            | mapping(bytes32 => TaxReceipt)                 |
+ * | 4     | suggestedTipRates      | uint256[] (dynamic array)                      |
+ * | 5     | platformFeeRate        | uint256                                        |
+ * | 6-55  | __gap                  | uint256[50]                                    |
+ *
+ * Constants (bytecode, no storage slot):
+ * - BASIS_POINTS = 10000
+ * - MINIMUM_DONATION = 1e15
+ * - MAX_FEE_RATE = 500
  */
-contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
+contract DurationDonation is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     struct Charity {
@@ -38,16 +56,19 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     mapping(address => Charity) public charities;
     mapping(address => mapping(address => uint256)) public donations; // donor => charity => amount
     mapping(bytes32 => TaxReceipt) public taxReceipts;
-    
-    // Pre-set tip percentages (in basis points)
-    uint256[] public suggestedTipRates = [500, 1000, 2000]; // 5%, 10%, 20%
+
+    // Pre-set tip percentages (in basis points) — initialized in initialize()
+    uint256[] public suggestedTipRates;
     uint256 public constant BASIS_POINTS = 10000;
     uint256 public constant MINIMUM_DONATION = 1e15; // 0.001 tokens minimum
 
-    // Mandatory platform fee (in basis points, 100 = 1%)
-    uint256 public platformFeeRate = 100;
+    // Mandatory platform fee (in basis points, 100 = 1%) — initialized in initialize()
+    uint256 public platformFeeRate;
     uint256 public constant MAX_FEE_RATE = 500; // Cap at 5%
-    
+
+    // Storage gap for future upgrades
+    uint256[50] private __gap;
+
     // Events
     event CharityRegistered(address indexed charity, uint256 timestamp);
     event CharityStatusUpdated(address indexed charity, bool isActive);
@@ -64,7 +85,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     event TaxReceiptGenerated(bytes32 indexed receiptId, address indexed donor);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     event PlatformFeeRateUpdated(uint256 oldRate, uint256 newRate);
-    
+
     // Errors
     error CharityNotRegistered(address charity);
     error CharityNotActive(address charity);
@@ -72,12 +93,26 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     error InvalidTipOption(uint8 tipOption);
     error TransferFailed(address token, address from, address to, uint256 amount);
     error InvalidFeeRate(uint256 rate);
-    
-    constructor(address _giveProtocolTreasury) Ownable(msg.sender) {
-        require(_giveProtocolTreasury != address(0), "Invalid treasury address");
-        giveProtocolTreasury = _giveProtocolTreasury;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
-    
+
+    function initialize(address _giveProtocolTreasury, address initialOwner) public initializer {
+        require(_giveProtocolTreasury != address(0), "Invalid treasury address");
+        require(initialOwner != address(0), "Invalid owner address");
+        __Ownable_init(initialOwner);
+        __ReentrancyGuard_init();
+        __Pausable_init();
+        __UUPSUpgradeable_init();
+        giveProtocolTreasury = _giveProtocolTreasury;
+        platformFeeRate = 100;
+        suggestedTipRates.push(500);
+        suggestedTipRates.push(1000);
+        suggestedTipRates.push(2000);
+    }
+
     /**
      * @dev Register a new charity
      * @param charityAddress The address of the charity to register
@@ -85,14 +120,14 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     function registerCharity(address charityAddress) external onlyOwner {
         require(charityAddress != address(0), "Invalid charity address");
         require(!charities[charityAddress].isRegistered, "Charity already registered");
-        
+
         charities[charityAddress] = Charity({
             isRegistered: true,
             walletAddress: charityAddress,
             totalReceived: 0,
             isActive: true
         });
-        
+
         emit CharityRegistered(charityAddress, block.timestamp);
     }
 
@@ -105,7 +140,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
         if (!charities[charityAddress].isRegistered) {
             revert CharityNotRegistered(charityAddress);
         }
-        
+
         charities[charityAddress].isActive = isActive;
         emit CharityStatusUpdated(charityAddress, isActive);
     }
@@ -133,7 +168,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
         platformFeeRate = newFeeRate;
         emit PlatformFeeRateUpdated(oldRate, newFeeRate);
     }
-    
+
     /**
      * @dev Process donation with mandatory platform fee and optional tip
      * @param charity The verified charity receiving the donation
@@ -204,7 +239,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
             donationId
         );
     }
-    
+
     /**
      * @dev Process donation with percentage-based tip
      * @param charity The verified charity
@@ -241,7 +276,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
         uint256 platformTip = calculateSuggestedTip(charityAmount, tipOption);
         processDonation(charity, token, charityAmount, platformTip);
     }
-    
+
     /**
      * @dev Process native token (DEV/GLMR) donation with mandatory fee
      * @param charity The verified charity
@@ -349,10 +384,10 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
             timestamp: block.timestamp,
             receiptType: platformTip > 0 ? "DUAL_BENEFICIARY" : "SINGLE_BENEFICIARY"
         });
-        
+
         emit TaxReceiptGenerated(receiptId, donor);
     }
-    
+
     /**
      * @dev Get charity information
      * @param charityAddress The address of the charity
@@ -371,7 +406,7 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
             charity.isActive
         );
     }
-    
+
     /**
      * @dev Get donation amount from donor to charity
      * @param donor The donor address
@@ -431,4 +466,9 @@ contract DurationDonation is Ownable, ReentrancyGuard, Pausable {
     function unpause() external onlyOwner {
         _unpause();
     }
+
+    /**
+     * @dev Authorize contract upgrade — only owner can upgrade
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }
