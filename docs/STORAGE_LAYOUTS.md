@@ -105,6 +105,31 @@ The contract's own state variables start at sequential slots after the inherited
 
 ---
 
+## FiatDonationAttestation
+
+### Inherited (OZ Upgradeable — ERC-7201 namespaced)
+- `AccessControlUpgradeable`: namespaced at `keccak256("openzeppelin.storage.AccessControl")`
+- `PausableUpgradeable`: namespaced at `keccak256("openzeppelin.storage.Pausable")`
+
+### Contract State Variables (sequential from slot 0)
+
+| Slot | Variable | Type |
+|------|----------|------|
+| 0 | `attestations` | `mapping(bytes32 => FiatAttestation)` |
+| 1 | `processedRefHashes` | `mapping(bytes32 => bool)` |
+| 2 | `charities` | `mapping(address => Charity)` |
+| 3 | `totalAttestedByCharity` | `mapping(address => mapping(bytes3 => uint256))` |
+| 4 | `attestationCount` | `uint256` |
+| 5 | `canonicalChainId` | `uint256` |
+| 6-55 | `__gap` | `uint256[50]` |
+
+### Constants (bytecode, no storage slot)
+- `ADMIN_ROLE` = `keccak256("ADMIN_ROLE")`
+- `ATTESTER_ROLE` = `keccak256("ATTESTER_ROLE")`
+- `MAX_BATCH_SIZE` = 50
+
+---
+
 ## Not Converted
 
 - **DistributionExecutor**: Not upgradeable. Single `immutable` state variable pointing to CharityScheduledDistribution proxy address.

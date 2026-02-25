@@ -132,18 +132,18 @@ async function main() {
 
   // 1. Deploy MockERC20 (testnet only)
   if (chainConfig.isTestnet) {
-    console.log("\n[1/8] Deploying MockERC20...");
+    console.log("\n[1/9] Deploying MockERC20...");
     const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
     const mockToken = await MockERC20.deploy("Give Test Token", "GIVE");
     await mockToken.waitForDeployment();
     contracts.MockERC20 = { address: await mockToken.getAddress() };
     console.log(`[OK] MockERC20: ${contracts.MockERC20.address}`);
   } else {
-    console.log("\n[1/8] Skipping MockERC20 (mainnet deployment)");
+    console.log("\n[1/9] Skipping MockERC20 (mainnet deployment)");
   }
 
   // 2. Deploy TimelockController — 72h (fund-holding contracts)
-  console.log(`\n[2/8] Deploying TimelockController (${FUND_HOLDING_DELAY / 3600}h — fund-holding)...`);
+  console.log(`\n[2/9] Deploying TimelockController (${FUND_HOLDING_DELAY / 3600}h — fund-holding)...`);
   const TimelockController = await hre.ethers.getContractFactory("TimelockController");
   const timelock72h = await TimelockController.deploy(
     FUND_HOLDING_DELAY,
@@ -156,7 +156,7 @@ async function main() {
   console.log(`[OK] TimelockController (72h): ${timelocks.fundHolding72h}`);
 
   // 3. Deploy TimelockController — 24h (record-keeping contracts)
-  console.log(`\n[3/8] Deploying TimelockController (${RECORD_KEEPING_DELAY / 3600}h — record-keeping)...`);
+  console.log(`\n[3/9] Deploying TimelockController (${RECORD_KEEPING_DELAY / 3600}h — record-keeping)...`);
   const timelock24h = await TimelockController.deploy(
     RECORD_KEEPING_DELAY,
     [multiSigAddress], // proposers
@@ -168,7 +168,7 @@ async function main() {
   console.log(`[OK] TimelockController (24h): ${timelocks.recordKeeping24h}`);
 
   // 4. Deploy DurationDonation proxy (fund-holding → 72h timelock as owner)
-  console.log("\n[4/8] Deploying DurationDonation (UUPS proxy)...");
+  console.log("\n[4/9] Deploying DurationDonation (UUPS proxy)...");
   const DurationDonation = await hre.ethers.getContractFactory("DurationDonation");
   const donation = await hre.upgrades.deployProxy(
     DurationDonation,
@@ -183,7 +183,7 @@ async function main() {
   console.log(`     Implementation: ${donationImpl}`);
 
   // 5. Deploy PortfolioFunds proxy (fund-holding → 72h timelock as admin)
-  console.log("\n[5/8] Deploying PortfolioFunds (UUPS proxy)...");
+  console.log("\n[5/9] Deploying PortfolioFunds (UUPS proxy)...");
   const PortfolioFunds = await hre.ethers.getContractFactory("PortfolioFunds");
   const portfolio = await hre.upgrades.deployProxy(
     PortfolioFunds,
@@ -212,7 +212,7 @@ async function main() {
   console.log("     [OK] Roles transferred to timelock");
 
   // 6. Deploy CharityScheduledDistribution proxy (fund-holding → 72h timelock as owner)
-  console.log("\n[6/8] Deploying CharityScheduledDistribution (UUPS proxy)...");
+  console.log("\n[6/9] Deploying CharityScheduledDistribution (UUPS proxy)...");
   const CharityScheduledDistribution = await hre.ethers.getContractFactory("CharityScheduledDistribution");
   const distribution = await hre.upgrades.deployProxy(
     CharityScheduledDistribution,
@@ -227,7 +227,7 @@ async function main() {
   console.log(`     Implementation: ${distributionImpl}`);
 
   // 7. Deploy VolunteerVerification proxy (record-keeping → 24h timelock as owner)
-  console.log("\n[7/8] Deploying VolunteerVerification (UUPS proxy)...");
+  console.log("\n[7/9] Deploying VolunteerVerification (UUPS proxy)...");
   const VolunteerVerification = await hre.ethers.getContractFactory("VolunteerVerification");
   const verification = await hre.upgrades.deployProxy(
     VolunteerVerification,
@@ -242,15 +242,47 @@ async function main() {
   console.log(`     Implementation: ${verificationImpl}`);
 
   // 8. Deploy DistributionExecutor (not upgradeable — takes proxy address)
-  console.log("\n[8/8] Deploying DistributionExecutor...");
+  console.log("\n[8/9] Deploying DistributionExecutor...");
   const DistributionExecutor = await hre.ethers.getContractFactory("DistributionExecutor");
   const executor = await DistributionExecutor.deploy(distributionProxy);
   await executor.waitForDeployment();
   contracts.DistributionExecutor = { address: await executor.getAddress() };
   console.log(`[OK] DistributionExecutor: ${contracts.DistributionExecutor.address}`);
 
-  // Save deployment info
+  // 9. Deploy FiatDonationAttestation proxy (record-keeping → 24h timelock as admin)
+  console.log("\n[9/9] Deploying FiatDonationAttestation (UUPS proxy)...");
   const chainId = (await hre.ethers.provider.getNetwork()).chainId;
+  const FiatDonationAttestation = await hre.ethers.getContractFactory("FiatDonationAttestation");
+  const fiatAttestation = await hre.upgrades.deployProxy(
+    FiatDonationAttestation,
+    [Number(chainId), deployer.address], // deployer as initial admin to configure roles
+    { initializer: "initialize", kind: "uups" },
+  );
+  await fiatAttestation.waitForDeployment();
+  const fiatAttestationProxy = await fiatAttestation.getAddress();
+  const fiatAttestationImpl = await hre.upgrades.erc1967.getImplementationAddress(fiatAttestationProxy);
+  contracts.FiatDonationAttestation = { proxy: fiatAttestationProxy, implementation: fiatAttestationImpl };
+  console.log(`[OK] FiatDonationAttestation proxy: ${fiatAttestationProxy}`);
+  console.log(`     Implementation: ${fiatAttestationImpl}`);
+
+  // Grant roles then transfer admin to 24h timelock
+  const FDA_DEFAULT_ADMIN_ROLE = await fiatAttestation.DEFAULT_ADMIN_ROLE();
+  const FDA_ADMIN_ROLE = await fiatAttestation.ADMIN_ROLE();
+  const FDA_ATTESTER_ROLE = await fiatAttestation.ATTESTER_ROLE();
+
+  // Grant ATTESTER_ROLE to bridge wallet (defaults to deployer for testnets)
+  const attesterAddress = process.env.ATTESTER_ADDRESS || deployer.address;
+  console.log(`     Attester (bridge wallet): ${attesterAddress}`);
+  await fiatAttestation.grantRole(FDA_ATTESTER_ROLE, attesterAddress);
+
+  console.log("     Transferring admin roles to timelock...");
+  await fiatAttestation.grantRole(FDA_DEFAULT_ADMIN_ROLE, timelocks.recordKeeping24h);
+  await fiatAttestation.grantRole(FDA_ADMIN_ROLE, timelocks.recordKeeping24h);
+  await fiatAttestation.revokeRole(FDA_ADMIN_ROLE, deployer.address);
+  await fiatAttestation.revokeRole(FDA_DEFAULT_ADMIN_ROLE, deployer.address);
+  console.log("     [OK] Roles transferred to timelock");
+
+  // Save deployment info
   const deploymentInfo = {
     network: networkName,
     chainId: Number(chainId),
@@ -308,6 +340,7 @@ async function main() {
   console.log(`VITE_${envPrefix}_VERIFICATION_ADDRESS=${contracts.VolunteerVerification.proxy}`);
   console.log(`VITE_${envPrefix}_DISTRIBUTION_ADDRESS=${contracts.CharityScheduledDistribution.proxy}`);
   console.log(`VITE_${envPrefix}_EXECUTOR_ADDRESS=${contracts.DistributionExecutor.address}`);
+  console.log(`VITE_${envPrefix}_FIAT_ATTESTATION_ADDRESS=${contracts.FiatDonationAttestation.proxy}`);
 
   // Verify contracts if API key available
   const hasApiKey =
@@ -344,6 +377,7 @@ async function main() {
     await verifyContract(contracts.PortfolioFunds.implementation, []);
     await verifyContract(contracts.CharityScheduledDistribution.implementation, []);
     await verifyContract(contracts.VolunteerVerification.implementation, []);
+    await verifyContract(contracts.FiatDonationAttestation.implementation, []);
     // Verify DistributionExecutor
     await verifyContract(contracts.DistributionExecutor.address, [distributionProxy]);
   }

@@ -17,6 +17,7 @@
 | PortfolioFunds | Fund-holding | 72h | `onlyRole(DEFAULT_ADMIN_ROLE)` (role held by 72h timelock) |
 | CharityScheduledDistribution | Fund-holding | 72h | `onlyOwner` (owner = 72h timelock) |
 | VolunteerVerification | Record-keeping | 24h | `onlyOwner` (owner = 24h timelock) |
+| FiatDonationAttestation | Record-keeping | 24h | `onlyRole(DEFAULT_ADMIN_ROLE)` (role held by 24h timelock) |
 | DistributionExecutor | Not upgradeable | N/A | N/A |
 
 ## Upgrade Procedure
@@ -95,7 +96,7 @@ Verify state preservation:
 - Check `owner()` / role assignments haven't changed
 - Verify the proxy address hasn't changed
 
-### Record-Keeping Contracts (VolunteerVerification)
+### Record-Keeping Contracts (VolunteerVerification, FiatDonationAttestation)
 
 Same procedure as above, with 24-hour delay instead of 72 hours.
 
