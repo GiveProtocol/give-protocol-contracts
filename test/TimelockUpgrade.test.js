@@ -50,7 +50,6 @@ describe("TimelockUpgrade", () => {
     it("Should execute owner-only calls through timelock after delay", async () => {
       const charityAddr = ethers.Wallet.createRandom().address;
       const donationAddr = await donation.getAddress();
-      const timelockAddr = await timelock.getAddress();
 
       // Encode the call
       const callData = donation.interface.encodeFunctionData("registerCharity", [charityAddr]);

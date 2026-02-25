@@ -172,14 +172,14 @@ describe("FiatDonationAttestation", () => {
       const ref = refHash("001");
       const hash = await attestDonation(charity1.address, 5000, USD, ref);
 
-      const a = await attestation.getAttestation(hash);
-      expect(a.attestationHash).to.equal(hash);
-      expect(a.charity).to.equal(charity1.address);
-      expect(a.amountInCents).to.equal(5000);
-      expect(a.currencyCode).to.equal(USD);
-      expect(a.attestedAt).to.be.gt(0);
-      expect(a.offChainRefHash).to.equal(ref);
-      expect(a.status).to.equal(0); // Pending
+      const record = await attestation.getAttestation(hash);
+      expect(record.attestationHash).to.equal(hash);
+      expect(record.charity).to.equal(charity1.address);
+      expect(record.amountInCents).to.equal(5000);
+      expect(record.currencyCode).to.equal(USD);
+      expect(record.attestedAt).to.be.gt(0);
+      expect(record.offChainRefHash).to.equal(ref);
+      expect(record.status).to.equal(0); // Pending
     });
 
     it("Should compute correct attestation hash", async () => {
@@ -378,7 +378,7 @@ describe("FiatDonationAttestation", () => {
   // 5. Reversal
   // ──────────────────────────────────────────────
   describe("Reversal", () => {
-    let attestHash;
+    let attestHash = null;
 
     beforeEach(async () => {
       await registerCharity(charity1.address);
@@ -388,8 +388,8 @@ describe("FiatDonationAttestation", () => {
     it("Should reverse an attestation", async () => {
       await attestation.connect(attester).reverseAttestation(attestHash);
 
-      const a = await attestation.getAttestation(attestHash);
-      expect(a.status).to.equal(2); // Reversed
+      const record = await attestation.getAttestation(attestHash);
+      expect(record.status).to.equal(2); // Reversed
     });
 
     it("Should decrement aggregates on reversal", async () => {
@@ -642,14 +642,14 @@ describe("FiatDonationAttestation", () => {
 
     it("Should return attestation by hash", async () => {
       const hash = await attestDonation(charity1.address, 5000, USD, refHash("view-001"));
-      const a = await attestation.getAttestation(hash);
-      expect(a.charity).to.equal(charity1.address);
-      expect(a.amountInCents).to.equal(5000);
+      const record = await attestation.getAttestation(hash);
+      expect(record.charity).to.equal(charity1.address);
+      expect(record.amountInCents).to.equal(5000);
     });
 
     it("Should return empty attestation for unknown hash", async () => {
-      const a = await attestation.getAttestation(refHash("nonexistent"));
-      expect(a.attestedAt).to.equal(0);
+      const record = await attestation.getAttestation(refHash("nonexistent"));
+      expect(record.attestedAt).to.equal(0);
     });
 
     it("Should return total attested per charity per currency", async () => {
@@ -735,8 +735,8 @@ describe("FiatDonationAttestation", () => {
       expect(await upgraded.getTotalAttested(charity1.address, USD)).to.equal(5000);
       expect(await upgraded.canonicalChainId()).to.equal(HARDHAT_CHAIN_ID);
 
-      const a = await upgraded.getAttestation(hash);
-      expect(a.amountInCents).to.equal(5000);
+      const record = await upgraded.getAttestation(hash);
+      expect(record.amountInCents).to.equal(5000);
     });
 
     it("Should keep same proxy address after upgrade", async () => {
@@ -776,12 +776,12 @@ describe("FiatDonationAttestation", () => {
       await registerCharity(charity1.address);
       const hash = await attestDonation(charity1.address, 5000, USD, refHash("priv-002"));
 
-      const a = await attestation.getAttestation(hash);
+      const record = await attestation.getAttestation(hash);
       // The struct fields: attestationHash, charity, amountInCents,
       // currencyCode, attestedAt, offChainRefHash, status
       // charity is the receiving org, NOT the donor
       // Verify no field matches the attester (bridge wallet) address
-      expect(a.charity).to.not.equal(attester.address);
+      expect(record.charity).to.not.equal(attester.address);
     });
 
     it("Should not expose donor info through any function return", async () => {
@@ -790,8 +790,8 @@ describe("FiatDonationAttestation", () => {
 
       // Verify getAttestation return has exactly 7 struct fields
       // and none of them are donor-related
-      const a = await attestation.getAttestation(hash);
-      const fields = a.toObject();
+      const record = await attestation.getAttestation(hash);
+      const fields = record.toObject();
       const fieldNames = Object.keys(fields);
       expect(fieldNames).to.have.lengthOf(7);
       expect(fieldNames).to.not.include("donor");
