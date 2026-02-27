@@ -100,6 +100,34 @@ Verify state preservation:
 
 Same procedure as above, with 24-hour delay instead of 72 hours.
 
+## Multi-Sig Coordination Steps
+
+The timelock's proposer and executor roles are held by a multi-sig wallet (e.g., Gnosis Safe). All upgrade operations require coordinated signing.
+
+### Proposing an Upgrade (3-of-5 required)
+
+1. **Initiator** creates a Safe transaction batch containing the `timelock.schedule(...)` call
+2. Share the Safe transaction link with all signers via the team's secure channel
+3. Each signer independently verifies:
+   - The new implementation address matches the audited/reviewed deployment
+   - The proxy target address is correct for the intended contract
+   - The calldata decodes to `upgradeToAndCall(newImpl, "0x")` (or includes valid reinitializer data)
+   - The salt is unique and descriptive
+4. Collect 3 of 5 signatures; the final signer executes the Safe transaction
+5. Record the timelock operation ID for tracking: `keccak256(abi.encode(target, value, data, predecessor, salt))`
+
+### Executing After Delay
+
+1. After the timelock delay expires, **initiator** creates a Safe transaction for `timelock.execute(...)`
+2. Same signing ceremony: 3-of-5 must verify and sign
+3. Before signing, each signer should verify the implementation contract is verified on the block explorer
+
+### Cancelling a Pending Upgrade
+
+Any proposer can cancel before execution:
+1. Create a Safe transaction for `timelock.cancel(operationId)`
+2. Collect 3-of-5 signatures and execute immediately (no delay for cancellation)
+
 ## Emergency Procedures
 
 ### Pausing
@@ -141,6 +169,61 @@ User → ERC1967Proxy (permanent address) → Implementation (replaceable)
 - Implementation address changes on upgrade
 - State lives in the proxy's storage, not the implementation's
 - The `_authorizeUpgrade` function in each implementation gates who can upgrade
+
+## Per-Contract Post-Upgrade Verification
+
+### DurationDonation
+```javascript
+// Verify state preserved
+await donation.giveProtocolTreasury();   // Should match pre-upgrade value
+await donation.platformFeeRate();         // Should be 100 (or current value)
+await donation.getSuggestedTipRates();    // Should return [500, 1000, 2000]
+await donation.owner();                   // Should be timelock address
+// Test a registered charity is still accessible
+await donation.getCharityInfo(KNOWN_CHARITY_ADDRESS);
+```
+
+### CharityScheduledDistribution
+```javascript
+await distribution.treasury();            // Should match pre-upgrade value
+await distribution.platformFeeRate();     // Should be 100 (or current value)
+await distribution.nextScheduleId();      // Should match pre-upgrade value
+await distribution.owner();               // Should be timelock address
+// Verify an active schedule still exists
+await distribution.donationSchedules(KNOWN_SCHEDULE_ID);
+```
+
+### PortfolioFunds
+```javascript
+await portfolioFunds.treasury();          // Should match pre-upgrade value
+await portfolioFunds.platformFeeRate();   // Should be 100 (or current value)
+await portfolioFunds.governanceActive();  // Should match pre-upgrade value
+// Verify roles preserved
+const ADMIN_ROLE = await portfolioFunds.ADMIN_ROLE();
+await portfolioFunds.hasRole(ADMIN_ROLE, TIMELOCK_ADDRESS); // Should be true
+// Verify a fund still exists
+await portfolioFunds.getFundDetails(KNOWN_FUND_ID);
+```
+
+### VolunteerVerification
+```javascript
+await verification.owner();               // Should be timelock address
+// Verify a known charity registration
+await verification.charities(KNOWN_CHARITY_ADDRESS);
+// Verify a known application hash
+await verification.checkApplicationVerification(KNOWN_APP_HASH);
+```
+
+### FiatDonationAttestation
+```javascript
+await attestation.canonicalChainId();     // Should match network chain ID
+await attestation.attestationCount();     // Should match pre-upgrade value
+// Verify roles preserved
+const DEFAULT_ADMIN = await attestation.DEFAULT_ADMIN_ROLE();
+await attestation.hasRole(DEFAULT_ADMIN, TIMELOCK_ADDRESS); // Should be true
+// Verify a known attestation
+await attestation.getAttestation(KNOWN_ATTESTATION_HASH);
+```
 
 ## Implementation Slot
 

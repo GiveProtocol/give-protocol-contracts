@@ -424,5 +424,16 @@ describe("CharityScheduledDistribution", () => {
       });
       expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
+
+    it("Should emit Upgraded event with new implementation address", async () => {
+      const V2 = await ethers.getContractFactory("CharityScheduledDistribution");
+      const v2Impl = await V2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      await expect(distribution.upgradeToAndCall(v2Addr, "0x"))
+        .to.emit(distribution, "Upgraded")
+        .withArgs(v2Addr);
+    });
   });
 });

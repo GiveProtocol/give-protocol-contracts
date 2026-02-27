@@ -135,5 +135,27 @@ describe("TimelockUpgrade", () => {
         hre.upgrades.upgradeProxy(await donation.getAddress(), V2, { kind: "uups" }),
       ).to.be.revertedWithCustomError(donation, "OwnableUnauthorizedAccount");
     });
+
+    it("Should emit Upgraded event when upgrading through timelock", async () => {
+      const proxyAddr = await donation.getAddress();
+
+      // Deploy new implementation
+      const V2 = await ethers.getContractFactory("DurationDonation");
+      const v2Impl = await V2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      // Encode upgradeToAndCall
+      const upgradeData = donation.interface.encodeFunctionData("upgradeToAndCall", [v2Addr, "0x"]);
+      const salt = ethers.id("upgrade-event-test");
+
+      // Schedule and execute upgrade through timelock
+      await timelock.connect(proposer).schedule(proxyAddr, 0, upgradeData, ethers.ZeroHash, salt, MIN_DELAY);
+      await time.increase(MIN_DELAY + 1);
+
+      await expect(
+        timelock.connect(executor).execute(proxyAddr, 0, upgradeData, ethers.ZeroHash, salt),
+      ).to.emit(donation, "Upgraded").withArgs(v2Addr);
+    });
   });
 });

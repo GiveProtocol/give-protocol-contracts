@@ -279,5 +279,42 @@ describe("VolunteerVerification", () => {
       });
       expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
+
+    it("Should emit Upgraded event with new implementation address", async () => {
+      const V2 = await ethers.getContractFactory("VolunteerVerification");
+      const v2Impl = await V2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      await expect(verification.upgradeToAndCall(v2Addr, "0x"))
+        .to.emit(verification, "Upgraded")
+        .withArgs(v2Addr);
+    });
+
+    it("Should preserve verification records across upgrade", async () => {
+      // Write verification state
+      await verification.registerCharity(charity.address);
+      const applicationHash = ethers.keccak256(ethers.toUtf8Bytes("upgrade-app"));
+      await verification.connect(charity).verifyApplication(applicationHash, applicant.address);
+      const hoursHash = ethers.keccak256(ethers.toUtf8Bytes("upgrade-hours"));
+      await verification.connect(charity).verifyHours(hoursHash, volunteer.address, 10);
+
+      // Upgrade
+      const V2 = await ethers.getContractFactory("VolunteerVerification");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await verification.getAddress(), V2, { kind: "uups" },
+      );
+
+      // Verify all state preserved
+      const app = await upgraded.checkApplicationVerification(applicationHash);
+      expect(app.isVerified).to.equal(true);
+      expect(app.applicant).to.equal(applicant.address);
+      expect(app.charity).to.equal(charity.address);
+
+      const hours = await upgraded.checkHoursVerification(hoursHash);
+      expect(hours.isVerified).to.equal(true);
+      expect(hours.volunteer).to.equal(volunteer.address);
+      expect(hours.hoursWorked).to.equal(10);
+    });
   });
 });

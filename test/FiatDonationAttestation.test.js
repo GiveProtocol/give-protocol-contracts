@@ -745,6 +745,17 @@ describe("FiatDonationAttestation", () => {
       const upgraded = await hre.upgrades.upgradeProxy(proxyAddr, V2, { kind: "uups" });
       expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
+
+    it("Should emit Upgraded event with new implementation address", async () => {
+      const V2 = await ethers.getContractFactory("FiatDonationAttestation");
+      const v2Impl = await V2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      await expect(attestation.upgradeToAndCall(v2Addr, "0x"))
+        .to.emit(attestation, "Upgraded")
+        .withArgs(v2Addr);
+    });
   });
 
   // ──────────────────────────────────────────────

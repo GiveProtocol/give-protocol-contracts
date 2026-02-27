@@ -563,5 +563,56 @@ describe("PortfolioFunds", () => {
       });
       expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
+
+    it("Should emit Upgraded event with new implementation address", async () => {
+      const V2 = await ethers.getContractFactory("PortfolioFunds");
+      const v2Impl = await V2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      await expect(portfolioFunds.upgradeToAndCall(v2Addr, "0x"))
+        .to.emit(portfolioFunds, "Upgraded")
+        .withArgs(v2Addr);
+    });
+
+    it("Should preserve fund and charity state across upgrade", async () => {
+      // Write fund state
+      await portfolioFunds.addVerifiedCharity(charity1.address, "Charity One");
+      await portfolioFunds.addVerifiedCharity(charity2.address, "Charity Two");
+      await portfolioFunds.createPortfolioFund(
+        "Upgrade Test Fund", "Test fund for upgrade",
+        [charity1.address, charity2.address], ["Charity One", "Charity Two"],
+      );
+      const activeFunds = await portfolioFunds.getAllActiveFunds();
+      const fundId = activeFunds[0];
+
+      // Donate to create token balances
+      await token.connect(donor).approve(await portfolioFunds.getAddress(), ethers.parseEther("100.0"));
+      await portfolioFunds.connect(donor).donateToFund(fundId, await token.getAddress(), ethers.parseEther("100.0"));
+
+      // Record pre-upgrade state
+      const detailsBefore = await portfolioFunds.getFundDetails(fundId);
+      const claimableBefore = await portfolioFunds.getCharityClaimableAmount(fundId, charity1.address, await token.getAddress());
+
+      // Upgrade
+      const V2 = await ethers.getContractFactory("PortfolioFunds");
+      const upgraded = await hre.upgrades.upgradeProxy(
+        await portfolioFunds.getAddress(), V2, { kind: "uups" },
+      );
+
+      // Verify all state preserved
+      expect(await upgraded.verifiedCharities(charity1.address)).to.equal(true);
+      expect(await upgraded.charityNames(charity1.address)).to.equal("Charity One");
+      expect(await upgraded.treasury()).to.equal(treasury.address);
+      expect(await upgraded.platformFeeRate()).to.equal(FEE_RATE);
+
+      const detailsAfter = await upgraded.getFundDetails(fundId);
+      expect(detailsAfter.name).to.equal(detailsBefore.name);
+      expect(detailsAfter.active).to.equal(detailsBefore.active);
+      expect(detailsAfter.totalRaised).to.equal(detailsBefore.totalRaised);
+
+      const claimableAfter = await upgraded.getCharityClaimableAmount(fundId, charity1.address, await token.getAddress());
+      expect(claimableAfter).to.equal(claimableBefore);
+    });
   });
 });

@@ -678,5 +678,17 @@ describe("DurationDonation", () => {
       });
       expect(await upgraded.getAddress()).to.equal(proxyAddr);
     });
+
+    it("Should emit Upgraded event with new implementation address", async () => {
+      const proxyAddr = await donation.getAddress();
+      const V2 = await ethers.getContractFactory("DurationDonation");
+      const v2Impl = await V2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      await expect(donation.upgradeToAndCall(v2Addr, "0x"))
+        .to.emit(donation, "Upgraded")
+        .withArgs(v2Addr);
+    });
   });
 });
