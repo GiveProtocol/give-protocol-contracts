@@ -680,7 +680,6 @@ describe("DurationDonation", () => {
     });
 
     it("Should emit Upgraded event with new implementation address", async () => {
-      const proxyAddr = await donation.getAddress();
       const V2 = await ethers.getContractFactory("DurationDonation");
       const v2Impl = await V2.deploy();
       await v2Impl.waitForDeployment();

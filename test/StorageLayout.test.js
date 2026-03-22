@@ -34,16 +34,6 @@ function mappingSlot(key, baseSlot) {
   );
 }
 
-// Helper: compute Solidity mapping slot for mapping(uint256 => X) at baseSlot
-function mappingSlotUint(key, baseSlot) {
-  return ethers.keccak256(
-    ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint256", "uint256"],
-      [key, baseSlot],
-    ),
-  );
-}
-
 // Helper: compute Solidity mapping slot for mapping(bytes32 => X) at baseSlot
 function mappingSlotBytes32(key, baseSlot) {
   return ethers.keccak256(
@@ -73,10 +63,10 @@ describe("StorageLayout", () => {
   // ────────────────────────────────────────────────
   describe("DurationDonation", () => {
     let donation, proxyAddr;
-    let owner, treasury, charity, donor;
+    let owner, treasury, charity;
 
     beforeEach(async () => {
-      [owner, treasury, charity, donor] = await ethers.getSigners();
+      [owner, treasury, charity] = await ethers.getSigners();
       const DurationDonation = await ethers.getContractFactory("DurationDonation");
       donation = await hre.upgrades.deployProxy(
         DurationDonation,
