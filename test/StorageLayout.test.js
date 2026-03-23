@@ -62,8 +62,8 @@ describe("StorageLayout", () => {
   // Slots 6–55: __gap
   // ────────────────────────────────────────────────
   describe("DurationDonation", () => {
-    let donation = undefined, proxyAddr = undefined;
-    let owner = undefined, treasury = undefined, charity = undefined;
+    let donation = null, proxyAddr = null;
+    let owner = null, treasury = null, charity = null;
 
     beforeEach(async () => {
       [owner, treasury, charity] = await ethers.getSigners();
@@ -124,8 +124,8 @@ describe("StorageLayout", () => {
   // Slots 6–55: __gap
   // ────────────────────────────────────────────────
   describe("CharityScheduledDistribution", () => {
-    let distribution = undefined, proxyAddr = undefined;
-    let owner = undefined, treasury = undefined, charity = undefined;
+    let distribution = null, proxyAddr = null;
+    let owner = null, treasury = null, charity = null;
 
     beforeEach(async () => {
       [owner, treasury, charity] = await ethers.getSigners();
@@ -183,8 +183,8 @@ describe("StorageLayout", () => {
   // Slots 8–57: __gap
   // ────────────────────────────────────────────────
   describe("PortfolioFunds", () => {
-    let portfolioFunds = undefined, proxyAddr = undefined;
-    let owner = undefined, treasury = undefined, charity1 = undefined;
+    let portfolioFunds = null, proxyAddr = null;
+    let owner = null, treasury = null, charity1 = null;
 
     beforeEach(async () => {
       [owner, treasury, charity1] = await ethers.getSigners();
@@ -248,8 +248,8 @@ describe("StorageLayout", () => {
   // Slots 3–52: __gap
   // ────────────────────────────────────────────────
   describe("VolunteerVerification", () => {
-    let verification = undefined, proxyAddr = undefined;
-    let owner = undefined, charity = undefined, applicant = undefined;
+    let verification = null, proxyAddr = null;
+    let owner = null, charity = null, applicant = null;
 
     beforeEach(async () => {
       [owner, charity, applicant] = await ethers.getSigners();
@@ -298,8 +298,8 @@ describe("StorageLayout", () => {
   // Slots 6–55: __gap
   // ────────────────────────────────────────────────
   describe("FiatDonationAttestation", () => {
-    let attestation = undefined, proxyAddr = undefined;
-    let admin = undefined, attester = undefined, charity1 = undefined;
+    let attestation = null, proxyAddr = null;
+    let admin = null, attester = null, charity1 = null;
 
     const HARDHAT_CHAIN_ID = 31337n;
     const USD = ethers.encodeBytes32String("USD").slice(0, 8);
