@@ -147,13 +147,13 @@ async function main() {
   if (networkName !== "moonbase") {
     throw new Error(
       `This script targets Moonbase Alpha. Got: ${networkName}\n` +
-      `Run with: npx hardhat run scripts/deploy-portfolio-funds-testnet.cjs --network moonbase`,
+      "Run with: npx hardhat run scripts/deploy-portfolio-funds-testnet.cjs --network moonbase",
     );
   }
 
-  console.log("\n" + "=".repeat(60));
+  console.log(`\n${"=".repeat(60)}`);
   console.log("PortfolioFunds — Moonbase Alpha Testnet Deployment");
-  console.log("=".repeat(60) + "\n");
+  console.log(`${"=".repeat(60)}\n`);
 
   // --- Deployer info ---
   const [deployer] = await hre.ethers.getSigners();
@@ -239,27 +239,27 @@ async function main() {
   fs.writeFileSync(addressesFile, JSON.stringify(addresses, null, 2));
 
   // --- Summary ---
-  console.log("\n" + "=".repeat(60));
+  console.log(`\n${"=".repeat(60)}`);
   console.log("DEPLOYMENT COMPLETE");
-  console.log("=".repeat(60));
+  console.log(`${"=".repeat(60)}`);
   console.log(`\nPortfolioFunds proxy: ${proxyAddress}`);
   console.log(`Implementation:       ${implAddress}`);
   console.log(`Platform fee:         ${feeRate} bps (${feeRate / 100n}%)`);
   console.log(`Treasury:             ${savedTreasury}`);
-  console.log(`\nDeployment saved to:`);
+  console.log("\nDeployment saved to:");
   console.log(`  ${moonbaseFile}`);
   console.log(`  ${addressesFile}`);
 
-  console.log("\n" + "-".repeat(60));
+  console.log(`\n${"-".repeat(60)}`);
   console.log("NEXT STEPS");
-  console.log("-".repeat(60));
-  console.log(`\n1. Update your webapp .env with:\n`);
+  console.log(`${"-".repeat(60)}`);
+  console.log("\n1. Update your webapp .env with:\n");
   console.log(`   VITE_MOONBASE_PORTFOLIO_FUNDS_ADDRESS=${proxyAddress}\n`);
-  console.log(`2. Restart the webapp dev server:\n`);
-  console.log(`   cd ~/projects/give-protocol-webapp && npm run dev\n`);
-  console.log(`3. Connect MetaMask to Moonbase Alpha (chainId 1287)`);
-  console.log(`   RPC: https://rpc.api.moonbase.moonbeam.network`);
-  console.log(`   Get DEV tokens: https://faucet.moonbeam.network/\n`);
+  console.log("2. Restart the webapp dev server:\n");
+  console.log("   cd ~/projects/give-protocol-webapp && npm run dev\n");
+  console.log("3. Connect MetaMask to Moonbase Alpha (chainId 1287)");
+  console.log("   RPC: https://rpc.api.moonbase.moonbeam.network");
+  console.log("   Get DEV tokens: https://faucet.moonbeam.network/\n");
 
   // --- Verify on Moonscan ---
   if (process.env.MOONSCAN_API_KEY) {

@@ -20,7 +20,7 @@ const { ethers } = hre;
  */
 
 // Helper: read a raw storage slot from a proxy address
-async function readSlot(proxyAddr, slot) {
+function readSlot(proxyAddr, slot) {
   return ethers.provider.getStorage(proxyAddr, slot);
 }
 
@@ -62,8 +62,8 @@ describe("StorageLayout", () => {
   // Slots 6–55: __gap
   // ────────────────────────────────────────────────
   describe("DurationDonation", () => {
-    let donation, proxyAddr;
-    let owner, treasury, charity;
+    let donation = undefined, proxyAddr = undefined;
+    let owner = undefined, treasury = undefined, charity = undefined;
 
     beforeEach(async () => {
       [owner, treasury, charity] = await ethers.getSigners();
@@ -79,7 +79,7 @@ describe("StorageLayout", () => {
 
     it("Slot 0: giveProtocolTreasury", async () => {
       const raw = await readSlot(proxyAddr, 0);
-      const addr = ethers.getAddress("0x" + raw.slice(26)); // last 20 bytes
+      const addr = ethers.getAddress(`0x${raw.slice(26)}`); // last 20 bytes
       expect(addr).to.equal(treasury.address);
     });
 
@@ -124,8 +124,8 @@ describe("StorageLayout", () => {
   // Slots 6–55: __gap
   // ────────────────────────────────────────────────
   describe("CharityScheduledDistribution", () => {
-    let distribution, proxyAddr;
-    let owner, treasury, charity;
+    let distribution = undefined, proxyAddr = undefined;
+    let owner = undefined, treasury = undefined, charity = undefined;
 
     beforeEach(async () => {
       [owner, treasury, charity] = await ethers.getSigners();
@@ -153,7 +153,7 @@ describe("StorageLayout", () => {
 
     it("Slot 4: treasury address", async () => {
       const raw = await readSlot(proxyAddr, 4);
-      const addr = ethers.getAddress("0x" + raw.slice(26));
+      const addr = ethers.getAddress(`0x${raw.slice(26)}`);
       expect(addr).to.equal(treasury.address);
     });
 
@@ -183,8 +183,8 @@ describe("StorageLayout", () => {
   // Slots 8–57: __gap
   // ────────────────────────────────────────────────
   describe("PortfolioFunds", () => {
-    let portfolioFunds, proxyAddr;
-    let owner, treasury, charity1;
+    let portfolioFunds = undefined, proxyAddr = undefined;
+    let owner = undefined, treasury = undefined, charity1 = undefined;
 
     beforeEach(async () => {
       [owner, treasury, charity1] = await ethers.getSigners();
@@ -212,7 +212,7 @@ describe("StorageLayout", () => {
 
     it("Slot 5: treasury address", async () => {
       const raw = await readSlot(proxyAddr, 5);
-      const addr = ethers.getAddress("0x" + raw.slice(26));
+      const addr = ethers.getAddress(`0x${raw.slice(26)}`);
       expect(addr).to.equal(treasury.address);
     });
 
@@ -248,8 +248,8 @@ describe("StorageLayout", () => {
   // Slots 3–52: __gap
   // ────────────────────────────────────────────────
   describe("VolunteerVerification", () => {
-    let verification, proxyAddr;
-    let owner, charity, applicant;
+    let verification = undefined, proxyAddr = undefined;
+    let owner = undefined, charity = undefined, applicant = undefined;
 
     beforeEach(async () => {
       [owner, charity, applicant] = await ethers.getSigners();
@@ -298,8 +298,8 @@ describe("StorageLayout", () => {
   // Slots 6–55: __gap
   // ────────────────────────────────────────────────
   describe("FiatDonationAttestation", () => {
-    let attestation, proxyAddr;
-    let admin, attester, charity1;
+    let attestation = undefined, proxyAddr = undefined;
+    let admin = undefined, attester = undefined, charity1 = undefined;
 
     const HARDHAT_CHAIN_ID = 31337n;
     const USD = ethers.encodeBytes32String("USD").slice(0, 8);
